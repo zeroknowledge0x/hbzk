@@ -931,10 +931,13 @@ async function main() {
   await renderer.warmArt();
   voice.start();
   await game.start();
-  // Never publish a category, challenge, or black game merely because Chrome launched.
-  if (!/^https:\/\/www\.housebets\.com\/games\/housegames-/i.test(game.page?.url?.() || '')) {
-    const entry = await game.openGameByCard('Dice');
-    if (!entry?.ok) throw new Error('Broadcast refused: could not enter a House Game');
+  // Cloudflare can outlast the first launch return. Retry the card click; never publish the challenge.
+  const gateUntil = Date.now() + 120000;
+  while (!/^https:\/\/www\.housebets\.com\/games\/housegames-/i.test(game.page?.url?.() || '') && Date.now() < gateUntil) {
+    if (!/just a moment/i.test(`${game.title || ''} ${game.page?.url?.() || ''}`)) {
+      await game.openGameByCard('Dice').catch(() => null);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
   await game.page?.bringToFront?.();
   const readyDeadline = Date.now() + 20000;
