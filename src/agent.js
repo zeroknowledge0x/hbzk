@@ -73,7 +73,7 @@ function originalsUrl(game) {
 // In-game free play: short, anchored controls only. Anything longer is marketing copy.
 // manual/auto are mode toggles, not free-play actions - they made playPolicy click Manual every ~8s.
 // cash out is situational like manual/auto: leaving it in made playPolicy spam Cash out every ~8s after a Mines round.
-const INGAME_CONTROL = /^(auto\s*pick|hit|stand|double|deal|(?:place\s*)?bet|roll|play|start|go|drop|pick|reveal|higher|lower|red|black|over|under|min|max)$/i;
+const INGAME_CONTROL = /^(auto\s*pick|random\s*pick|hit|stand|double|deal|(?:place\s*)?bet|roll|play|start|go|drop|pick|reveal|higher|lower|skip|same|classic|red|black|over|under|min|max)$/i;
 const TUNE_CONTROL = /^(win chance|payout|target|multiplier|difficulty|tiles|mines count)$/i;
 const INGAME_SHORT = 24;
 const BET_CHECK_MS = 20000;

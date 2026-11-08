@@ -43,7 +43,7 @@ function delay(ms) {
 export const GAME_CARD = {
   dice: 'Dice', mines: 'Mines', plinko: 'Plinko', keno: 'Keno', wheel: 'Wheel', limbo: 'Limbo',
   'max-win': 'Max Win', hilo: 'Hilo', blackjack: 'Blackjack', 'dragon-tower': 'Dragon Tower',
-  'hubie-s-road': 'Hubiesroad', 'coin-flip': 'Coinflip', baccarat: 'Baccarat', roulette: 'Roulette',
+  'hubie-s-road': "Hubie's Road", 'coin-flip': 'Coinflip', baccarat: 'Baccarat', roulette: 'Roulette',
 };
 
 export function gameSlugFromUrl(url) {
@@ -420,6 +420,31 @@ export class GameFeed {
     }
   }
 
+  // After a play click: dump the current table frame. Does not call a vision model.
+  async snapPlay(tag = 'play') {
+    const img = this.frame;
+    if (!img) return { ok: false, error: 'no frame' };
+    try {
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const { createCanvas } = await import('@napi-rs/canvas');
+      const w = Number(img.width) || 1280;
+      const h = Number(img.height) || 720;
+      const canvas = createCanvas(Math.min(w, 1280), Math.min(h, 720));
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      const buf = canvas.toBuffer('image/jpeg', 55);
+      if (!buf?.length) return { ok: false, error: 'empty jpeg' };
+      fs.mkdirSync('logs', { recursive: true });
+      fs.writeFileSync(path.join('logs', 'play-frame.jpg'), buf);
+      this.lastPlayShot = { tag: String(tag || 'play').slice(0, 40), at: Date.now(), bytes: buf.length };
+      log(`play: frame after ${this.lastPlayShot.tag} ${buf.length}b`);
+      return { ok: true, ...this.lastPlayShot };
+    } catch (err) {
+      log(`play: frame skip (${err.message})`);
+      return { ok: false, error: err.message };
+    }
+  }
+
   // Synchronous snapshot for tools.reportAll(). Page URL is read live; title/blocked are
   // refreshed by the screencast and the Cloudflare wait loop.
   getReport() {
@@ -650,7 +675,7 @@ export class GameFeed {
           const st = window.getComputedStyle(el);
           return !(st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0');
         };
-        if (!/mines|dragon-tower|tower/i.test(`${location.href} ${document.title}`)) {
+        if (!/mines|dragon-tower|hubie-s-road|tower/i.test(`${location.href} ${document.title}`)) {
           return { ok: false, reason: 'not mines' };
         }
         const mineTile = (el, r) => {

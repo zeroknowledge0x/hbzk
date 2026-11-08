@@ -3,7 +3,7 @@
 const NAME = 'Hilo';
 const SLUG = 'housegames-hilo';
 const SETTINGS = {};
-const START_LABELS = ['Bet', 'Deal', 'Higher', 'Lower'];
+const START_LABELS = ['Bet', 'Deal', 'Higher', 'Lower', 'Skip', 'Same'];
 
 function controlsOf(tools) {
   const world = tools?.world;

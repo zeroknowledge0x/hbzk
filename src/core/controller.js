@@ -5,6 +5,7 @@
 
 import { byName } from './adapters/index.js';
 import { checkAction } from './safety.js';
+import { PLAY_CLICK_LABELS } from './play-labels.js';
 
 export class Controller {
   constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable }) {
@@ -344,27 +345,49 @@ export class Controller {
     const adapter = byName(gameName);
     if (adapter?.pick === 'tile' && typeof this.game?.clickMinesTile === 'function') {
       const tile = await this.game.clickMinesTile();
-      if (tile?.ok) return { ok: true, detail: tile };
+      if (tile?.ok) {
+        await this._snapPlay(tile.text || 'tile');
+        return { ok: true, detail: tile };
+      }
     }
     if (adapter?.pick === 'number' && typeof this.game?.clickText === 'function') {
       for (const n of [3, 11, 18, 24, 31]) {
         const spot = await this.game.clickText(String(n)).catch(() => null);
-        if (spot?.ok) break;
+        if (spot?.ok) {
+          await this._snapPlay(String(n));
+          break;
+        }
       }
     }
-    const labels = [...(adapter?.startLabels || []), step.args?.label, 'Bet', 'Hit', 'Stand', 'Higher', 'Lower', 'Cash out', 'Random pick']
+    const labels = [...(adapter?.startLabels || []), step.args?.label, ...PLAY_CLICK_LABELS]
       .filter(Boolean)
       .filter((v, i, a) => a.findIndex((x) => String(x).toLowerCase() === String(v).toLowerCase()) === i);
     let last = { ok: false, error: 'no play control' };
     for (const label of labels) {
       last = await this.tools.run('click', { label });
-      if (last?.ok) return last;
+      if (last?.ok) {
+        await this._snapPlay(last.text || label);
+        return last;
+      }
       if (typeof this.game?.clickText === 'function') {
         const raw = await this.game.clickText(label).catch(() => null);
-        if (raw?.ok) return { ok: true, detail: raw };
+        if (raw?.ok) {
+          await this._snapPlay(raw.text || label);
+          return { ok: true, detail: raw };
+        }
       }
     }
     return last;
+  }
+
+  async _snapPlay(tag) {
+    if (typeof this.game?.snapPlay !== 'function') return null;
+    try {
+      return await this.game.snapPlay(tag);
+    } catch (err) {
+      this.log(`controller: play frame skip (${err?.message || err})`);
+      return null;
+    }
   }
 
   _captureSnapshot() {

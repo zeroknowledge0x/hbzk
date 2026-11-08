@@ -3,7 +3,7 @@
 const NAME = 'Dragon Tower';
 const SLUG = 'housegames-dragon-tower';
 const SETTINGS = {};
-const START_LABELS = ['Bet', 'Start', 'Cash out', 'Random pick'];
+const START_LABELS = ['Bet', 'Start', 'GO', 'Cash out', 'Random pick'];
 
 function controlsOf(tools) {
   const world = tools?.world;

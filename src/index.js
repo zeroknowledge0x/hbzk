@@ -586,8 +586,8 @@ async function refreshWorld() {
     const controls = (report.clickables || [])
       .map((x) => collapseDup(x.text))
       .filter((t) => t && !CHROME.test(t));
-    const phase=controls.some(x=>/^cash out\b|^hit$|^stand$/i.test(x))?'playing'
-      :controls.some(x=>/^(bet|roll|deal|spin|play)$/i.test(x))?'idle':'unknown';
+    const phase=controls.some(x=>/^cash out\b|^hit$|^stand$|^higher|^lower|^random pick/i.test(x))?'playing'
+      :controls.some(x=>/^(bet|roll|deal|spin|play|go)$/i.test(x))?'idle':'unknown';
     world.apply({game:adapter?.name||null,phase,controls,report,lastResult:report.outcome||null,
       balance:p.balance??null,multiplier:settings.multiplier??null,winChance:settings.winChance??null,
       stake:settings.stake??null,round:controller.status().completed,at:Date.now()});

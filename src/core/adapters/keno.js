@@ -3,7 +3,7 @@
 const NAME = 'Keno';
 const SLUG = 'housegames-keno';
 const SETTINGS = { winChance: 'Number' };
-const START_LABELS = ['Bet', 'Play'];
+const START_LABELS = ['Bet', 'Play', 'Auto pick'];
 
 function number(value) {
   if (value === null || value === undefined || value === '') return null;
