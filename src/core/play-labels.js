@@ -36,9 +36,10 @@ export function preferInRoundLabels(labels, { phase, controls } = {}) {
   if (!playing) return list;
   const rank = (label) => {
     const s = String(label).toLowerCase();
-    if (/^(hit|stand|higher|lower|cash out|random pick)$/.test(s)) return 0;
+    if (/^(hit|stand|higher|lower|random pick)$/.test(s)) return 0;
     if (/^go$/.test(s)) return 1;
-    if (/^bet$/.test(s)) return 3;
+    if (/^cash out$/.test(s)) return 3;
+    if (/^bet$/.test(s)) return 4;
     return 2;
   };
   return list.sort((a, b) => rank(a) - rank(b));

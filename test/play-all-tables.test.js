@@ -5,7 +5,7 @@ import { DEFAULT_PLAYABLE, isPlayable, playableList } from '../src/play-queue.js
 import { Controller } from '../src/core/controller.js';
 import { Planner } from '../src/core/planner.js';
 import { World } from '../src/core/world.js';
-import { PLAY_CLICK_LABELS } from '../src/core/play-labels.js';
+import { PLAY_CLICK_LABELS, preferInRoundLabels } from '../src/core/play-labels.js';
 
 test('default rotation includes every House Original, not Dice only', () => {
   const prev = process.env.PLAYABLE_GAMES;
@@ -37,9 +37,19 @@ test('blackjack and hilo expose in-round labels, keno/mines pick spots', () => {
   assert.equal(byName('Dragon Tower').pick, 'tile');
   assert.equal(byName('Dice').resolvesAtZero, true);
   assert.equal(byName('Blackjack').resolvesAtZero, false);
+  assert.equal(byName('Hilo').pick, null);
   for (const a of ALL) {
     assert.ok(Array.isArray(a.startLabels) && a.startLabels.length >= 2, a.name);
   }
+});
+
+test('in-round tower prefers Random pick over Cash out', () => {
+  const ordered = preferInRoundLabels(
+    ['Bet', 'Cash out', 'Random pick'],
+    { phase: 'playing', controls: ['Cash out', 'Random pick'] },
+  );
+  assert.equal(ordered[0], 'Random pick');
+  assert.ok(ordered.indexOf('Random pick') < ordered.indexOf('Cash out'));
 });
 
 test('blackjack start_round clicks Hit when Bet is missing; no result is still ok', async () => {

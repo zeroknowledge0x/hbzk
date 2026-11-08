@@ -384,6 +384,8 @@ export class Controller {
           await this._snapPlay(raw.text || label);
           return { ok: true, detail: raw };
         }
+        last = { ok: false, error: raw?.error || 'not found' };
+        continue;
       }
       last = await this.tools.run('click', { label });
       if (last?.ok) {
