@@ -24,6 +24,7 @@ import { Verifier } from './core/verifier.js';
 import { byName } from './core/adapters/index.js';
 import { Controller } from './core/controller.js';
 import { Rotation, quietIntervalMs } from './core/rotation.js';
+import { inferPhase } from './core/play-labels.js';
 import { OpsLoop } from './ops-loop.js';
 import { rankMessages } from './core/priority.js';
 import { classify, pickGreetLine } from './intent.js';
@@ -589,8 +590,7 @@ async function refreshWorld() {
     const controls = (report.clickables || [])
       .map((x) => collapseDup(x.text))
       .filter((t) => t && !CHROME.test(t));
-    const phase=controls.some(x=>/^cash out\b|^hit$|^stand$|^higher|^lower|^random pick/i.test(x))?'playing'
-      :controls.some(x=>/^(bet|roll|deal|spin|play|go)$/i.test(x))?'idle':'unknown';
+    const phase = inferPhase(controls);
     world.apply({game:adapter?.name||null,phase,controls,report,lastResult:report.outcome||null,
       balance:p.balance??null,multiplier:settings.multiplier??null,winChance:settings.winChance??null,
       stake:settings.stake??null,round:controller.status().completed,at:Date.now()});

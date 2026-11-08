@@ -3,7 +3,7 @@
 const NAME = "Hubie's Road";
 const SLUG = 'housegames-hubie-s-road';
 const SETTINGS = {};
-const START_LABELS = ['GO', 'Bet', 'Start', 'Random pick', 'Cash out'];
+const START_LABELS = ['GO', 'Bet', 'Start', 'Random pick'];
 
 function controlsOf(tools) {
   const world = tools?.world;

@@ -5,7 +5,7 @@ import { DEFAULT_PLAYABLE, isPlayable, playableList } from '../src/play-queue.js
 import { Controller } from '../src/core/controller.js';
 import { Planner } from '../src/core/planner.js';
 import { World } from '../src/core/world.js';
-import { PLAY_CLICK_LABELS, preferInRoundLabels } from '../src/core/play-labels.js';
+import { PLAY_CLICK_LABELS, preferInRoundLabels, inferPhase } from '../src/core/play-labels.js';
 
 test('default rotation includes every House Original, not Dice only', () => {
   const prev = process.env.PLAYABLE_GAMES;
@@ -50,6 +50,18 @@ test('in-round tower prefers Random pick over Cash out', () => {
   );
   assert.equal(ordered[0], 'Random pick');
   assert.ok(ordered.indexOf('Random pick') < ordered.indexOf('Cash out'));
+});
+
+test('Bet plus Random pick is idle and Bet is first', () => {
+  assert.equal(inferPhase(['Bet', 'Random pick', 'Cash out']), 'idle');
+  assert.equal(inferPhase(['Random pick']), 'playing');
+  assert.equal(inferPhase(['Hit', 'Stand', 'Bet']), 'playing');
+  assert.equal(inferPhase(['Higher', 'Bet']), 'idle');
+  const ordered = preferInRoundLabels(
+    ['Bet', 'Cash out', 'Random pick'],
+    { phase: inferPhase(['Bet', 'Random pick']), controls: ['Bet', 'Random pick'] },
+  );
+  assert.equal(ordered[0], 'Bet');
 });
 
 test('blackjack start_round clicks Hit when Bet is missing; no result is still ok', async () => {

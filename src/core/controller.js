@@ -400,6 +400,15 @@ export class Controller {
         controls.some((c) => String(c).toLowerCase().includes(String(label).toLowerCase())));
       if (present.length) labels = present;
     }
+    const prev = this.game?.lastPointer;
+    const prevText = String(prev?.text || '').toLowerCase();
+    const stuck = prev?.at && Date.now() - prev.at < 8000
+      && /^(random pick|cash out|higher|lower|hit|stand)$/.test(prevText);
+    if (stuck) {
+      const start = labels.filter((l) => /^(bet|go|roll|deal|spin|play|start)$/i.test(String(l)));
+      const rest = labels.filter((l) => !start.includes(l) && String(l).toLowerCase() !== prevText);
+      labels = [...start, ...rest];
+    }
     let last = { ok: false, error: 'no play control' };
     for (const label of labels) {
       if (typeof this.game?.clickText === 'function') {

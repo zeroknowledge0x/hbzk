@@ -28,11 +28,22 @@ export const PLAY_CLICK_LABELS = [
 
 export const IN_ROUND_LABELS = ['Hit', 'Stand', 'Higher', 'Lower', 'Cash out', 'Random pick'];
 
+export function inferPhase(controls = []) {
+  const list = (controls || []).map((c) => String(c).toLowerCase().replace(/\s+/g, ' ').trim());
+  const has = (re) => list.some((c) => re.test(c));
+  if (has(/^(hit|stand)$/)) return 'playing';
+  const start = has(/^(bet|roll|deal|spin|play|go)$/);
+  const mid = has(/^(cash out|random pick|higher|lower)\b/);
+  if (mid && !start) return 'playing';
+  if (start) return 'idle';
+  return 'unknown';
+}
+
 export function preferInRoundLabels(labels, { phase, controls } = {}) {
   const list = Array.isArray(labels) ? [...labels] : [];
   const ctrls = (controls || []).map((c) => String(c).toLowerCase());
   const playing = phase === 'playing'
-    || ctrls.some((c) => /^(hit|stand|higher|lower|cash out|random pick)\b/.test(c));
+    || ctrls.some((c) => /^(hit|stand)$/.test(c));
   if (!playing) return list;
   const rank = (label) => {
     const s = String(label).toLowerCase();
