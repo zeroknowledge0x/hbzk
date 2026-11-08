@@ -257,7 +257,7 @@ export class Controller {
       const st = this.planner.status();
       if (st.failed) {
         this._active = false;
-        this.speak(`plan failed: ${st.error}`);
+        this.log(`controller: plan failed (${st.error})`);
       }
       if (st.done) {
         this._active = false;
@@ -279,7 +279,7 @@ export class Controller {
     const st = this.planner.status();
     if (st.failed) {
       this._active = false;
-      this.speak(`plan failed: ${st.error}`);
+      this.log(`controller: plan failed (${st.error})`);
       return;
     }
 
@@ -293,14 +293,19 @@ export class Controller {
 
     if (st.done) {
       this._active = false;
-      this.speak('goal complete');
     }
   }
 
   async _executeStep(step) {
     switch (step.kind) {
-      case 'enter_game':
+      case 'enter_game': {
+        const phase = this.world?.get?.()?.phase;
+        if (phase === 'playing') {
+          this.log('controller: already in a round — play this table, do not swap');
+          return { ok: true, skipped: true, reason: 'in-round' };
+        }
         return this.tools.run('change_game', step.args);
+      }
 
       case 'configure': {
         const r = await this.tools.run(step.tool, step.args);
@@ -347,7 +352,7 @@ export class Controller {
         if (spot?.ok) break;
       }
     }
-    const labels = [...(adapter?.startLabels || []), step.args?.label, 'Bet', 'Hit', 'Stand', 'Higher', 'Lower', 'Cash out']
+    const labels = [...(adapter?.startLabels || []), step.args?.label, 'Bet', 'Hit', 'Stand', 'Higher', 'Lower', 'Cash out', 'Random pick']
       .filter(Boolean)
       .filter((v, i, a) => a.findIndex((x) => String(x).toLowerCase() === String(v).toLowerCase()) === i);
     let last = { ok: false, error: 'no play control' };

@@ -70,3 +70,54 @@ test('blackjack start_round clicks Hit when Bet is missing; no result is still o
   await c.tick();
   assert.equal(planner.status().failed, false, planner.status().error);
 });
+
+test('enter_game while mid-round stays on the table instead of change_game', async () => {
+  const world = new World({ game: 'Dragon Tower', phase: 'playing', controls: ['Cash out', 'Random pick'], stake: 0 });
+  const planner = new Planner({ world });
+  const calls = [];
+  const tools = {
+    async run(name, args) {
+      calls.push(name);
+      if (name === 'change_game') return { ok: false, error: 'cannot change game mid-round' };
+      if (name === 'click') return { ok: true };
+      return { ok: true };
+    },
+  };
+  const said = [];
+  const c = new Controller({
+    world,
+    tools,
+    planner,
+    verifier: { async waitFor() { return { ok: false, error: 'timeout' }; } },
+    game: { getReport: () => ({ url: 'https://www.housebets.com/games/housegames-dragon-tower' }) },
+    playable: DEFAULT_PLAYABLE,
+    speak: (t) => said.push(t),
+  });
+  planner.setGoal({ kind: 'play', game: 'Plinko', rounds: 1 });
+  c._active = true;
+  await c.tick();
+  assert.equal(calls.includes('change_game'), false, `tools=${calls.join(',')}`);
+  assert.equal(planner.status().failed, false, planner.status().error);
+  await c.tick();
+  assert.ok(calls.includes('click'), `tools=${calls.join(',')}`);
+});
+
+test('a failed plan is logged, never spoken as plan failed', async () => {
+  const world = new World({ game: 'Dice', phase: 'idle', controls: ['Bet'], stake: 0 });
+  const planner = new Planner({ world });
+  const said = [];
+  const c = new Controller({
+    world,
+    tools: { async run() { return { ok: false, error: 'cannot change game mid-round' }; } },
+    planner,
+    verifier: { async waitFor() { return { ok: false }; } },
+    game: { getReport: () => ({ url: 'https://www.housebets.com/games/housegames-dice' }) },
+    playable: DEFAULT_PLAYABLE,
+    speak: (t) => said.push(t),
+  });
+  planner.setGoal({ kind: 'play', game: 'Dice', rounds: 1 });
+  c._active = true;
+  for (let i = 0; i < 8; i++) await c.tick();
+  assert.equal(planner.status().failed, true);
+  assert.equal(said.some((t) => /plan failed/i.test(t)), false, said.join(' | '));
+});
