@@ -24,6 +24,7 @@ import { Verifier } from './core/verifier.js';
 import { byName } from './core/adapters/index.js';
 import { Controller } from './core/controller.js';
 import { Rotation, quietIntervalMs } from './core/rotation.js';
+import { OpsLoop } from './ops-loop.js';
 import { rankMessages } from './core/priority.js';
 import { classify, pickGreetLine } from './intent.js';
 import { closeBrowser } from './browser.js';
@@ -928,6 +929,8 @@ async function main() {
   setInterval(refreshWorld,1000).unref?.();
   agent.start({ talkOnly: true });
   controllerBeat();
+  const ops = new OpsLoop({ game, brain, rotation, controller, speak, log, world });
+  ops.start();
 
   const limit = c.recordOnly ? (c.recordSeconds || 25) : 0;
   if (limit) {

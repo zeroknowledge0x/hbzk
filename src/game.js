@@ -1197,6 +1197,16 @@ export class GameFeed {
     this.#startScreencast(page).catch(() => {});
   }
 
+  async reviveCapture() {
+    const page = this.page;
+    if (!page || page.isClosed?.()) {
+      this.#recover();
+      return { ok: true, via: 'recover' };
+    }
+    await this.#cycleScreencast(page);
+    return { ok: true, via: 'cycle' };
+  }
+
   async #onScreencastFrame(page, f) {
     try {
       if (!this.firstFrameLogged) { this.firstFrameLogged = true; log('game: first screencast frame'); }
