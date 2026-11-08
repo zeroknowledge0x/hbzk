@@ -8,7 +8,7 @@ import { checkAction } from './safety.js';
 import { PLAY_CLICK_LABELS, preferInRoundLabels, shotLine } from './play-labels.js';
 
 export class Controller {
-  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable }) {
+  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame }) {
     this.world = world;
     this.tools = tools;
     this.planner = planner;
@@ -17,7 +17,8 @@ export class Controller {
     this.speak = speak || (() => {});
     this.log = log || (() => {});
     this.rotation = rotation;
-    this.playable = new Set([...(playable || ['Dice', 'Mines', 'Plinko', 'Keno', 'Wheel', 'Limbo', 'Max Win', 'Dragon Tower', 'Hilo', 'Blackjack'])].map(x => String(x).toLowerCase()));
+    this.playable = new Set([...(playable || ['Dice', 'Mines', 'Plinko', 'Keno', 'Wheel', 'Limbo', 'Max Win', 'Dragon Tower', 'Hilo', 'Blackjack', "Hubie's Road"])].map(x => String(x).toLowerCase()));
+    this.seeFrame = typeof seeFrame === 'function' ? seeFrame : null;
     this._chain = Promise.resolve();
     this._paused = false;
     this._active = false;
@@ -394,11 +395,17 @@ export class Controller {
         this.log(`controller: play frame skip (${err?.message || err})`);
       }
     }
-    const line = shotLine(tag);
+    const fallback = shotLine(tag);
     const now = Date.now();
-    if (line && now - this._lastShotTalk >= 25000) {
-      this._lastShotTalk = now;
-      this.speak(line);
+    if (now - this._lastShotTalk < 25000) return shot;
+    this._lastShotTalk = now;
+    if (this.seeFrame) {
+      Promise.resolve()
+        .then(() => this.seeFrame(tag))
+        .then((line) => { this.speak(line || fallback); })
+        .catch(() => { if (fallback) this.speak(fallback); });
+    } else if (fallback) {
+      this.speak(fallback);
     }
     return shot;
   }

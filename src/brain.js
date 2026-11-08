@@ -270,6 +270,40 @@ export class Brain {
     }
   }
 
+  // One host line about the play screenshot. Null on failure. Never chooses clicks.
+  async commentFrame(jpeg, tag = '') {
+    if (this.offline || !jpeg) return null;
+    let buf = null;
+    try { buf = Buffer.isBuffer(jpeg) ? jpeg : Buffer.from(jpeg); } catch { return null; }
+    if (!buf?.length || buf.length > 80000) return null;
+    try {
+      const text = await this.#chat(
+        [
+          {
+            role: 'system',
+            content: 'You are Hubie on a Housebets demo stream. One spoken English line, max 12 words. Describe only what you see. No JSON, no URLs, no deposits, no real money, no planner talk.',
+          },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: `Just clicked "${String(tag || 'play')}". What is on this demo table?` },
+              { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${buf.toString('base64')}` } },
+            ],
+          },
+        ],
+        { maxTokens: 40, temperature: 0.5, timeoutMs: 8000 },
+      );
+      const shaped = shapeSpoken(String(text || '').split('\n')[0], 'idle');
+      if (shaped.fallback || !shaped.text) return null;
+      const words = shaped.text.split(/\s+/).filter(Boolean);
+      if (words.length > 16) return words.slice(0, 12).join(' ');
+      return shaped.text;
+    } catch (err) {
+      log(`brain: frame comment skipped (${err.message})`);
+      return null;
+    }
+  }
+
   #userPrompt(kind, payload) {
     if (kind === 'reply') {
       return `Viewer "${payload.name}" wrote: "${payload.text}". Answer them by name, one line.`;

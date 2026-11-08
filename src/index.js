@@ -502,7 +502,11 @@ const rotation = new Rotation({file:path.join(process.cwd(),'data','rotation.jso
   names:String(process.env.CORE_ROTATION || allowed.join(',')).split(',').map(x => x.trim()).filter(x => byName(x)),
   playable:allowed,intervalMs:quietIntervalMs()});
 const controller = new Controller({world,tools:coreTools,planner,verifier,game,rotation,playable:allowed,log,
-  speak:(text,msg={})=>speak(text,'reply',{chatId:msg?.id||null,name:msg?.name||'ops'})});
+  speak:(text,msg={})=>speak(text,'reply',{chatId:msg?.id||null,name:msg?.name||'ops'}),
+  seeFrame: async (tag) => {
+    const jpeg = await game.captureLowRes?.();
+    return brain.commentFrame?.(jpeg, tag);
+  }});
 if (process.env.CORE_AUTOPLAY === '0') controller.pause();
 bus.on('speak', ({text,kind})=>speak(text,kind||'reply'));
 let controllerStopped = false;
