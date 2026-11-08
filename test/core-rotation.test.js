@@ -205,4 +205,22 @@ describe('Rotation', () => {
       assert.equal(rot.current(), 'Mines');
     });
   });
+
+  describe('quiet rotation', () => {
+    it('quietIntervalMs is 10-60 min when env is unset', async () => {
+      const { quietIntervalMs } = await import('../src/core/rotation.js');
+      const ms = quietIntervalMs(undefined, () => 0);
+      assert.equal(ms, 10 * 60 * 1000);
+      const hi = quietIntervalMs(undefined, () => 0.999999);
+      assert.ok(hi >= 10 * 60 * 1000 && hi <= 60 * 60 * 1000);
+    });
+
+    it('random() returns a playable name and not always the first', () => {
+      const rot = makeRotation();
+      const seen = new Set();
+      for (let i = 0; i < 20; i++) seen.add(rot.random());
+      assert.ok(seen.size >= 2, [...seen].join(','));
+      for (const name of seen) assert.ok(['Dice', 'Mines', 'Plinko'].includes(name));
+    });
+  });
 });

@@ -1531,7 +1531,24 @@ export class GameFeed {
         }
       }
 
-      // Step 2: clicking the card. Prefer a real anchor for this slug (the lobby renders
+      // Step 2: House Games shelf first — Hubie's Road sits there, not in the top grid.
+      await this.page.evaluate(() => {
+        const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+        const deep = (sel, root = document, out = []) => {
+          try { for (const n of root.querySelectorAll(sel)) out.push(n); } catch { /* bad selector */ }
+          let all; try { all = root.querySelectorAll('*'); } catch { return out; }
+          for (const el of all) if (el.shadowRoot) deep(sel, el.shadowRoot, out);
+          return out;
+        };
+        for (const el of deep('a,button,[role="button"],span,div')) {
+          const t = norm(el.innerText || el.getAttribute('aria-label') || '');
+          if (/^house games$/i.test(t)) { el.click(); return t; }
+        }
+        return null;
+      }).catch(() => null);
+      await delay(800);
+
+      // Step 3: clicking the card. Prefer a real anchor for this slug (the lobby renders
       // each House original as a link), then fall back to exact label matching, then to a
       // scrolled retry — Blackjack/Plinko sit lower in the grid and are not in view.
       const slugForName = Object.entries(GAME_CARD).find(([, n]) => n.toLowerCase() === label.toLowerCase())?.[0] || null;
@@ -1573,31 +1590,34 @@ export class GameFeed {
       }, label, slugForName);
 
       if (!hit) {
-        // Scroll the lobby once and retry: the grid is virtualised below the fold.
-        await this.page.evaluate(() => window.scrollBy(0, 700)).catch(() => {});
-        await delay(900);
-        const again = await this.page.evaluate((gameName, slug) => {
-          const norm = (x) => String(x || '').replace(/\s+/g, ' ').trim();
-          const deep = (sel, root = document, out = []) => {
-            try { for (const n of root.querySelectorAll(sel)) out.push(n); } catch { /* bad selector */ }
-            let all; try { all = root.querySelectorAll('*'); } catch { return out; }
-            for (const el of all) if (el.shadowRoot) deep(sel, el.shadowRoot, out);
-            return out;
-          };
-          if (slug) {
-            const link = deep(`a[href*="housegames-${slug}"]`)[0];
-            if (link) { link.click(); return { via: 'href-scrolled' }; }
-          }
-          for (const el of deep('div,span,a,button,p,img,[role="button"]')) {
-            const label = norm(el.innerText || el.getAttribute('aria-label') || el.getAttribute('alt') || '');
-            if (label.toLowerCase() !== gameName.toLowerCase()) continue;
-            const r = el.getBoundingClientRect();
-            if (r.width < 20 || r.height < 20) continue;
-            el.click();
-            return { via: 'label-scrolled' };
-          }
-          return null;
-        }, label, slugForName).catch(() => null);
+        // Scroll the lobby a few times: Hubie's Road sits on the House Games shelf.
+        let again = null;
+        for (let s = 0; s < 4 && !again; s++) {
+          await this.page.evaluate(() => window.scrollBy(0, 700)).catch(() => {});
+          await delay(700);
+          again = await this.page.evaluate((gameName, slug) => {
+            const norm = (x) => String(x || '').replace(/\s+/g, ' ').trim();
+            const deep = (sel, root = document, out = []) => {
+              try { for (const n of root.querySelectorAll(sel)) out.push(n); } catch { /* bad selector */ }
+              let all; try { all = root.querySelectorAll('*'); } catch { return out; }
+              for (const el of all) if (el.shadowRoot) deep(sel, el.shadowRoot, out);
+              return out;
+            };
+            if (slug) {
+              const link = deep(`a[href*="housegames-${slug}"]`)[0];
+              if (link) { link.click(); return { via: 'href-scrolled' }; }
+            }
+            for (const el of deep('div,span,a,button,p,img,[role="button"]')) {
+              const label = norm(el.innerText || el.getAttribute('aria-label') || el.getAttribute('alt') || '');
+              if (label.toLowerCase() !== gameName.toLowerCase()) continue;
+              const r = el.getBoundingClientRect();
+              if (r.width < 20 || r.height < 20) continue;
+              el.click();
+              return { via: 'label-scrolled' };
+            }
+            return null;
+          }, label, slugForName).catch(() => null);
+        }
         if (!again) return { ok: false, reason: `card "${label}" not found` };
         hit = again;
       }

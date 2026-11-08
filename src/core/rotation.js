@@ -4,6 +4,14 @@
 import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 
+export function quietIntervalMs(env = process.env.CORE_ROTATION_MS, rand = Math.random) {
+  const n = Number(env);
+  if (Number.isFinite(n) && n > 0) return Math.max(10_000, n);
+  const min = 10 * 60 * 1000;
+  const max = 60 * 60 * 1000;
+  return min + Math.floor(rand() * (max - min + 1));
+}
+
 export class Rotation {
   constructor({ file, names, playable, now, intervalMs } = {}) {
     this.file = file || 'rotation.json';
@@ -26,6 +34,20 @@ export class Rotation {
     }
     this._save();
     return name;
+  }
+
+  // Quiet stream: pick a random playable table and stay on it for the interval.
+  random() {
+    const pool = this.names.filter((candidate) =>
+      [...this.playable].some((p) => String(p).toLowerCase() === candidate.toLowerCase()));
+    if (pool.length <= 1) return this.next();
+    const current = this.current();
+    const rest = pool.filter((n) => n.toLowerCase() !== String(current || '').toLowerCase());
+    const pick = (rest.length ? rest : pool)[Math.floor(Math.random() * (rest.length ? rest.length : pool.length))];
+    const at = this.names.findIndex((n) => n.toLowerCase() === pick.toLowerCase());
+    if (at >= 0) this.index = (at + 1) % this.names.length;
+    this._save();
+    return pick;
   }
 
   current() {

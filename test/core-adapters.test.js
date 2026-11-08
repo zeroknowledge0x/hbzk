@@ -18,10 +18,11 @@ const FILES = [
   'limbo.js',
   'maxwin.js',
   'dragon-tower.js',
+  'hubie-road.js',
   'hilo.js',
   'blackjack.js',
 ];
-const EXPECTED = ['Dice', 'Mines', 'Plinko', 'Keno', 'Wheel', 'Limbo', 'Max Win', 'Dragon Tower', 'Hilo', 'Blackjack'];
+const EXPECTED = ['Dice', 'Mines', 'Plinko', 'Keno', 'Wheel', 'Limbo', 'Max Win', 'Dragon Tower', "Hubie's Road", 'Hilo', 'Blackjack'];
 
 function countingTools() {
   const calls = { set_multiplier: [], set_win_chance: [], other: [] };
@@ -60,8 +61,8 @@ function clickRecorder({ available = null, controls = null } = {}) {
   return { tools, seen };
 }
 
-test('registry exposes all ten games with unique names and slugs', () => {
-  assert.equal(ALL.length, 10);
+test('registry exposes all eleven games with unique names and slugs', () => {
+  assert.equal(ALL.length, 11);
   assert.deepEqual(names(), EXPECTED);
   assert.equal(new Set(names()).size, ALL.length);
 
@@ -79,6 +80,7 @@ test('registry exposes all ten games with unique names and slugs', () => {
 
   assert.equal(byName('tower'), byName('Dragon Tower'));
   assert.equal(byName('crash'), byName('Limbo'));
+  assert.equal(byName('road'), byName("Hubie's Road"));
   assert.equal(byName('maxwin'), byName('Max Win'));
   assert.equal(byName('no such game'), null);
   assert.equal(byName(''), null);
@@ -118,7 +120,7 @@ test('supported games advertise settings, the rest are deliberate no-ops', async
   const supported = ALL.filter((adapter) => Object.keys(adapter.settings).length > 0).map((adapter) => adapter.name);
   const unsupported = ALL.filter((adapter) => Object.keys(adapter.settings).length === 0).map((adapter) => adapter.name);
   assert.deepEqual(supported.sort(), ['Dice', 'Keno', 'Limbo', 'Max Win', 'Plinko', 'Wheel'].sort());
-  assert.deepEqual(unsupported.sort(), ['Blackjack', 'Dragon Tower', 'Hilo', 'Mines'].sort());
+  assert.deepEqual(unsupported.sort(), ['Blackjack', 'Dragon Tower', 'Hilo', "Hubie's Road", 'Mines'].sort());
 
   for (const adapter of ALL) {
     const tools = countingTools();

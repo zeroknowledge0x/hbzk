@@ -1,13 +1,13 @@
 // Play queue: viewer game requests, FIFO, plus the tiny parser that recognises them.
 import { byName } from './core/adapters/index.js';
 
-export const GAMES = ['Dice', 'Mines', 'Limbo', 'Plinko', 'Blackjack', 'Keno', 'Wheel', 'Hilo', 'Dragon Tower', 'Tower', 'Max Win'];
+export const GAMES = ['Dice', 'Mines', 'Limbo', 'Plinko', 'Blackjack', 'Keno', 'Wheel', 'Hilo', 'Dragon Tower', 'Tower', 'Max Win', "Hubie's Road"];
 
 export const DEFAULT_PLAYABLE = [
-  'Dice', 'Mines', 'Plinko', 'Keno', 'Wheel', 'Limbo', 'Max Win', 'Dragon Tower', 'Hilo', 'Blackjack',
+  'Dice', 'Mines', 'Plinko', 'Keno', 'Wheel', 'Limbo', 'Max Win', 'Dragon Tower', 'Hilo', 'Blackjack', "Hubie's Road",
 ];
 
-const GAME_WORD = /\b(dice|mines?|crash|limbo|plinko|blackjack|black\s*jack|keno|wheel|hilo|tower|max\s*win)\b/i;
+const GAME_WORD = /\b(dice|mines?|crash|limbo|plinko|blackjack|black\s*jack|keno|wheel|hilo|tower|max\s*win|hubie'?s?\s*road)\b/i;
 // "other/another/random/ganti/beda/next/change/pindah game(s)" with no named Original
 // -> random pick. "change the game" and plural "switch games" are the common chat forms.
 const OTHER_GAME = /\b(?:other|another|ganti|switch|random|beda|next|change|pindah)\s+(?:the\s+)?games?\b/i;
@@ -30,6 +30,8 @@ const NORMAL = {
   tower: 'Dragon Tower',
   dragontower: 'Dragon Tower',
   maxwin: 'Max Win',
+  hubiesroad: "Hubie's Road",
+  'hubie\'sroad': "Hubie's Road",
 };
 
 export function normalizeGame(word) {

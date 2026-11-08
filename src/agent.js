@@ -61,6 +61,9 @@ const ORIGINAL_SLUG = {
   hilo: 'housegames-hilo',
   tower: 'housegames-dragon-tower',
   'dragon tower': 'housegames-dragon-tower',
+  'hubie\'s road': 'housegames-hubie-s-road',
+  hubiesroad: 'housegames-hubie-s-road',
+  road: 'housegames-hubie-s-road',
   'max win': 'housegames-max-win',
   maxwin: 'housegames-max-win',
 };

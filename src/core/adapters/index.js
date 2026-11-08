@@ -8,6 +8,7 @@ import wheel from './wheel.js';
 import limbo from './limbo.js';
 import maxWin from './maxwin.js';
 import dragonTower from './dragon-tower.js';
+import hubieRoad from './hubie-road.js';
 import hilo from './hilo.js';
 import blackjack from './blackjack.js';
 
@@ -20,6 +21,7 @@ export const ALL = [
   limbo,
   maxWin,
   dragonTower,
+  hubieRoad,
   hilo,
   blackjack,
 ];
@@ -37,6 +39,8 @@ for (const adapter of ALL) {
 const ALIASES = {
   tower: 'Dragon Tower',
   crash: 'Limbo',
+  road: "Hubie's Road",
+  hubiesroad: "Hubie's Road",
 };
 
 export function byName(name) {

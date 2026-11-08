@@ -23,7 +23,7 @@ import { Planner } from './core/planner.js';
 import { Verifier } from './core/verifier.js';
 import { byName } from './core/adapters/index.js';
 import { Controller } from './core/controller.js';
-import { Rotation } from './core/rotation.js';
+import { Rotation, quietIntervalMs } from './core/rotation.js';
 import { rankMessages } from './core/priority.js';
 import { classify, pickGreetLine } from './intent.js';
 import { closeBrowser } from './browser.js';
@@ -500,7 +500,7 @@ bus.on('action', a => log(`core: action ${a.tool} ok=${a.ok} ${a.ms}ms`));
 const allowed = playableList();
 const rotation = new Rotation({file:path.join(process.cwd(),'data','rotation.json'),
   names:String(process.env.CORE_ROTATION || allowed.join(',')).split(',').map(x => x.trim()).filter(x => byName(x)),
-  playable:allowed,intervalMs:Math.max(10000,Number(process.env.CORE_ROTATION_MS)||30000)});
+  playable:allowed,intervalMs:quietIntervalMs()});
 const controller = new Controller({world,tools:coreTools,planner,verifier,game,rotation,playable:allowed,log,
   speak:(text,msg={})=>speak(text,'reply',{chatId:msg?.id||null,name:msg?.name||'ops'})});
 if (process.env.CORE_AUTOPLAY === '0') controller.pause();

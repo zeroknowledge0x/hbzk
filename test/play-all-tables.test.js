@@ -12,11 +12,12 @@ test('default rotation includes every House Original, not Dice only', () => {
   delete process.env.PLAYABLE_GAMES;
   try {
     assert.ok(DEFAULT_PLAYABLE.includes('Blackjack'));
-    assert.ok(DEFAULT_PLAYABLE.includes('Keno'));
-    assert.equal(playableList().length, 10);
+    assert.ok(DEFAULT_PLAYABLE.includes("Hubie's Road"));
+    assert.equal(playableList().length, 11);
     assert.equal(isPlayable('Blackjack'), true);
     assert.equal(isPlayable('tower'), true);
     assert.equal(isPlayable('Dragon Tower'), true);
+    assert.equal(isPlayable("Hubie's Road"), true);
     assert.equal(isPlayable('Limbo'), true);
   } finally {
     if (prev === undefined) delete process.env.PLAYABLE_GAMES;
@@ -158,4 +159,40 @@ test('a successful play click snapshots the table frame', async () => {
   await c.tick();
   await c.tick();
   assert.ok(shots.length >= 1, `shots=${shots.join(',')}`);
+});
+
+test('blackjack in-round prefers Hit over Bet', async () => {
+  const world = new World({ game: 'Blackjack', phase: 'playing', controls: ['Hit', 'Stand', 'Bet'], stake: 0 });
+  const planner = new Planner({ world });
+  const clicks = [];
+  const c = new Controller({
+    world,
+    tools: {
+      async run(name, args) {
+        if (name === 'change_game') return { ok: true };
+        if (name === 'click') {
+          clicks.push(args.label);
+          return { ok: true, text: args.label };
+        }
+        return { ok: true };
+      },
+    },
+    planner,
+    verifier: { async waitFor() { return { ok: false, error: 'timeout' }; } },
+    game: { getReport: () => ({ url: 'https://www.housebets.com/games/housegames-blackjack' }) },
+    playable: DEFAULT_PLAYABLE,
+  });
+  planner.setGoal({ kind: 'play', game: 'Blackjack', rounds: 1 });
+  c._active = true;
+  await c.tick();
+  await c.tick();
+  assert.equal(clicks[0], 'Hit', `clicked ${clicks.join(',')}`);
+});
+
+test("Hubie's Road starts with GO", () => {
+  const road = byName("Hubie's Road");
+  assert.ok(road);
+  assert.equal(road.slug, 'housegames-hubie-s-road');
+  assert.ok(road.startLabels.some((l) => /^go$/i.test(l)));
+  assert.equal(road.pick, 'tile');
 });
