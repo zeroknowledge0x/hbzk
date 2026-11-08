@@ -5,10 +5,10 @@
 
 import { byName } from './adapters/index.js';
 import { checkAction } from './safety.js';
-import { preferInRoundLabels, shotLine } from './play-labels.js';
+import { preferInRoundLabels } from './play-labels.js';
 
 export class Controller {
-  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame }) {
+  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue }) {
     this.world = world;
     this.tools = tools;
     this.planner = planner;
@@ -19,6 +19,7 @@ export class Controller {
     this.rotation = rotation;
     this.playable = new Set([...(playable || ['Dice', 'Mines', 'Plinko', 'Keno', 'Wheel', 'Limbo', 'Max Win', 'Dragon Tower', 'Hilo', 'Blackjack', "Hubie's Road"])].map(x => String(x).toLowerCase()));
     this.seeFrame = typeof seeFrame === 'function' ? seeFrame : null;
+    this.playQueue = playQueue || null;
     this._chain = Promise.resolve();
     this._paused = false;
     this._active = false;
@@ -247,6 +248,23 @@ export class Controller {
   async _tick() {
     if (this._paused) return;
     if (!this._active) {
+      const asked = this.playQueue?.peek?.();
+      if (asked && this.playable.has(String(asked.game).toLowerCase())) {
+        const now = Date.now();
+        const current = String(this.world?.get?.()?.game || '').toLowerCase();
+        const want = String(asked.game).toLowerCase();
+        if (this.playQueue.size > 1 && asked.startedAt && !this.playQueue.due(now) && current === want) {
+          return;
+        }
+        if (this.playQueue.size > 1 && this.playQueue.due(now)) this.playQueue.shift();
+        const next = this.playQueue.peek();
+        if (!next) return;
+        this.planner.setGoal({ kind: 'play', game: next.game, rounds: 1 });
+        this._active = true;
+        this.playQueue.holdMs(now);
+        this.log(`controller: chat switch ${next.name} -> ${next.game}`);
+        return;
+      }
       if (typeof this.rotation?.due !== 'function') return;
       const rotate = this.rotation.due();
       let name = null;
@@ -411,18 +429,14 @@ export class Controller {
         this.log(`controller: play frame skip (${err?.message || err})`);
       }
     }
-    const fallback = shotLine(tag);
     const now = Date.now();
     if (now - this._lastShotTalk < 25000) return shot;
     this._lastShotTalk = now;
-    if (this.seeFrame) {
-      Promise.resolve()
-        .then(() => this.seeFrame(tag))
-        .then((line) => { this.speak(line || fallback); })
-        .catch(() => { if (fallback) this.speak(fallback); });
-    } else if (fallback) {
-      this.speak(fallback);
-    }
+    if (!this.seeFrame) return shot;
+    Promise.resolve()
+      .then(() => this.seeFrame(tag))
+      .then((line) => { if (line) this.speak(line); })
+      .catch(() => {});
     return shot;
   }
 

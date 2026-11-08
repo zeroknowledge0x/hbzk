@@ -321,12 +321,9 @@ function pickFamiliarLine(name) {
 // Short, human queue announces (<=14 words, contractions, no repeated compliance phrase).
 // Rotated with an anti-repeat window of the last 3 so the voice does not chant one shape.
 const QUEUE_LINES = [
-  '{game} locked for {name} \u2014 still free.',
-  'Got it {name}, {game} is next.',
-  "{name} queued {game}. We're playing free.",
-  '{name} picked {game}. Small stake, we ride.',
-  'Locked {game} for {name}. No money involved.',
-  '{game} is up next for {name}. Still free play.',
+  '{name}, {game}. Switching now.',
+  'Heard you {name}. {game} is up.',
+  '{game} for {name}. Let us ride.',
 ];
 const recentQueueLines = [];
 function pickQueueLine(name, game) {
@@ -503,7 +500,7 @@ const rotation = new Rotation({file:path.join(process.cwd(),'data','rotation.jso
   names:String(process.env.CORE_ROTATION || allowed.join(',')).split(',').map(x => x.trim()).filter(x => byName(x)),
   playable:allowed,intervalMs:quietIntervalMs()});
 rotation.playNow();
-const controller = new Controller({world,tools:coreTools,planner,verifier,game,rotation,playable:allowed,log,
+const controller = new Controller({world,tools:coreTools,planner,verifier,game,rotation,playable:allowed,log,playQueue,
   speak:(text,msg={})=>speak(text,'reply',{chatId:msg?.id||null,name:msg?.name||'ops'}),
   seeFrame: async (tag) => {
     const jpeg = await game.captureLowRes?.();

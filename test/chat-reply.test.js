@@ -332,6 +332,19 @@ test('overlay chat keeps the newest real line when older promo lines are long', 
   assert.deepEqual(real.map((m) => m.text), ['limbo', "Yo! What's good? Enjoying your stream!"]);
 });
 
+test('one chat request switches now; a second request waits three minutes', async () => {
+  const q = new PlayQueue();
+  q.enqueue({ name: 'sam', game: 'Limbo', from: 'chat' });
+  assert.equal(q.peek().game, 'Limbo');
+  assert.equal(q.holdMs(1000), false);
+  q.enqueue({ name: 'lee', game: 'Keno', from: 'chat' });
+  assert.equal(q.holdMs(1000), true);
+  assert.equal(q.due(1000 + 179000), false);
+  assert.equal(q.due(1000 + 180000), true);
+  q.shift();
+  assert.equal(q.peek().game, 'Keno');
+});
+
 test('a viewer can replace their queued game and the stake helper is untouched', () => {
   const queue = new PlayQueue();
   queue.enqueue({ name: 'LiveHubi', game: 'Dice', from: 'chat' });

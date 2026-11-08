@@ -172,7 +172,35 @@ test('a successful play click snapshots the table frame', async () => {
   assert.ok(shots.length >= 1, `shots=${shots.join(',')}`);
 });
 
-test('seeFrame line is spoken instead of the canned shot line', async () => {
+test('seeFrame miss stays quiet instead of a canned click line', async () => {
+  const world = new World({ game: 'Dice', phase: 'idle', controls: ['Bet'], stake: 0 });
+  const planner = new Planner({ world });
+  const said = [];
+  const c = new Controller({
+    world,
+    tools: {
+      async run(name, args) {
+        if (name === 'change_game') return { ok: true };
+        if (name === 'click') return { ok: true, text: args.label };
+        return { ok: true };
+      },
+    },
+    planner,
+    verifier: { async waitFor() { return { ok: false }; } },
+    game: { getReport: () => ({ url: 'https://www.housebets.com/games/housegames-dice' }), async snapPlay() { return { ok: true }; } },
+    playable: DEFAULT_PLAYABLE,
+    speak: (t) => said.push(t),
+    seeFrame: async () => null,
+  });
+  planner.setGoal({ kind: 'play', game: 'Dice', rounds: 1 });
+  c._active = true;
+  await c.tick();
+  await c.tick();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(said.some((t) => /zero locked|sending it/i.test(t)), false);
+});
+
+test('seeFrame line is spoken when the model returns one', async () => {
   const world = new World({ game: 'Dice', phase: 'idle', controls: ['Bet'], stake: 0 });
   const planner = new Planner({ world });
   const said = [];

@@ -122,6 +122,19 @@ export class PlayQueue {
 
   peek() { return this.items[0] || null; }
   shift() { return this.items.shift() || null; }
+  holdMs(now = Date.now(), ms = 180000) {
+    const head = this.items[0];
+    if (!head || head.startedAt) return false;
+    if (this.items.length <= 1) return false;
+    head.startedAt = now;
+    head.holdUntil = now + ms;
+    return true;
+  }
+  due(now = Date.now()) {
+    const head = this.items[0];
+    if (!head?.holdUntil) return false;
+    return now >= head.holdUntil;
+  }
   clear() { this.items = []; }
   get size() { return this.items.length; }
   get length() { return this.items.length; }
