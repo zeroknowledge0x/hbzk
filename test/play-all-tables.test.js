@@ -5,7 +5,7 @@ import { DEFAULT_PLAYABLE, isPlayable, playableList } from '../src/play-queue.js
 import { Controller } from '../src/core/controller.js';
 import { Planner } from '../src/core/planner.js';
 import { World } from '../src/core/world.js';
-import { PLAY_CLICK_LABELS, preferInRoundLabels, inferPhase } from '../src/core/play-labels.js';
+import { PLAY_CLICK_LABELS, preferInRoundLabels, inferPhase, labelMatchesPlay, matchPlayClick } from '../src/core/play-labels.js';
 
 test('default rotation includes every House Original, not Dice only', () => {
   const prev = process.env.PLAYABLE_GAMES;
@@ -50,6 +50,13 @@ test('in-round tower prefers Random pick over Cash out', () => {
   );
   assert.equal(ordered[0], 'Random pick');
   assert.ok(ordered.indexOf('Random pick') < ordered.indexOf('Cash out'));
+});
+
+test('Bet does not match Bet Info', () => {
+  assert.equal(labelMatchesPlay('Bet', 'Bet Info'), false);
+  assert.equal(labelMatchesPlay('Bet', 'Bet'), true);
+  assert.equal(labelMatchesPlay('Higher', 'Higher / same'), true);
+  assert.equal(matchPlayClick('Bet', ['Bet Info']), null);
 });
 
 test('Bet plus Random pick is idle and Bet is first', () => {

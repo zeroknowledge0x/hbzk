@@ -1532,11 +1532,18 @@ export class GameFeed {
           if (label.length > 28 || PROMO.test(label)) continue;
           if (CTA.test(label) && label.toLowerCase() !== q) continue;
           const low = label.toLowerCase();
-          const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          let score = 0;
-          if (low === q) score = 100;
-          else if (new RegExp('^' + esc + '\\b').test(low) && label.length <= q.length + 8) score = 80;
-          else continue;
+          const matches = (want, seen) => {
+            const q = String(want || '').toLowerCase().replace(/\s+/g, ' ').trim();
+            const text = String(seen || '').toLowerCase().replace(/\s+/g, ' ').trim();
+            if (!q || !text) return false;
+            if (text === q) return true;
+            if (/\b(info|history|rules|fair|help|max|half|min)\b/.test(text)) return false;
+            const rest = text.replace(new RegExp('^' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b[\\s/]*'), '');
+            if (rest === text) return false;
+            return /^(same|card)$/.test(rest.replace(/[/\s]+/g, ''));
+          };
+          if (!matches(want, label)) continue;
+          let score = low === q ? 100 : 80;
           if (el.tagName.toLowerCase() === 'a') score += 5;
           if (href && href.toLowerCase().includes(q.replace(/\s+/g, ''))) score += 15;
           score += Math.max(0, 12 - label.length); // shorter title wins ties

@@ -79,6 +79,17 @@ export function shotLine(tag) {
   return key ? SHOT_LINE[key] : null;
 }
 
+export function labelMatchesPlay(want, label) {
+  const q = String(want || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const low = String(label || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!q || !low) return false;
+  if (low === q) return true;
+  if (/\b(info|history|rules|fair|help|max|half|min)\b/.test(low)) return false;
+  const rest = low.replace(new RegExp('^' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b[\\s/]*'), '');
+  if (rest === low) return false;
+  return /^(same|card)$/.test(rest.replace(/[/\s]+/g, ''));
+}
+
 export function matchPlayClick(want, controls) {
   const q = String(want || '').toLowerCase().replace(/\s+/g, ' ').trim();
   if (!q) return null;
@@ -88,6 +99,6 @@ export function matchPlayClick(want, controls) {
   });
   if (!allowed) return null;
   const list = Array.isArray(controls) ? controls : [];
-  const visible = list.some((c) => String(c).toLowerCase().includes(allowed.toLowerCase()));
+  const visible = list.some((c) => labelMatchesPlay(allowed, c));
   return visible ? allowed : null;
 }

@@ -5,7 +5,7 @@
 
 import { byName } from './adapters/index.js';
 import { checkAction } from './safety.js';
-import { preferInRoundLabels } from './play-labels.js';
+import { preferInRoundLabels, labelMatchesPlay } from './play-labels.js';
 
 export class Controller {
   constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue }) {
@@ -397,7 +397,7 @@ export class Controller {
     );
     if (controls.length) {
       const present = labels.filter((label) =>
-        controls.some((c) => String(c).toLowerCase().includes(String(label).toLowerCase())));
+        controls.some((c) => labelMatchesPlay(label, c)));
       if (present.length) labels = present;
     }
     const prev = this.game?.lastPointer;
