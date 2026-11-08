@@ -43,7 +43,8 @@ function fakeGame(overrides = {}) {
 
 function setup(initial = {}, overrides = {}) {
   const bus = new Bus();
-  const world = new World({ game: 'Dice', phase: 'betting', controls: ['Bet', 'Roll', 'Manual'], ...initial });
+  // Explicit zero is required: absent stake no longer authorizes a round action.
+  const world = new World({ game: 'Dice', stake: 0, phase: 'betting', controls: ['Bet', 'Roll', 'Manual'], ...initial });
   const game = fakeGame(overrides);
   const actions = [];
   const speech = [];

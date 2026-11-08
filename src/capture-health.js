@@ -3,10 +3,10 @@ import { createCanvas } from '@napi-rs/canvas';
 
 export function isFrameBlack(img, { threshold = 16, sample = 32 } = {}) {
   if (!img) return true;
-  const w = Number(img.width) || 0;
-  const h = Number(img.height) || 0;
-  if (w < 4 || h < 4) return true;
   try {
+    const w = Number(img.width) || 0;
+    const h = Number(img.height) || 0;
+    if (w < 4 || h < 4) return true;
     const canvas = createCanvas(sample, sample);
     canvas.getContext('2d').drawImage(img, 0, 0, sample, sample);
     const data = canvas.getContext('2d').getImageData(0, 0, sample, sample).data;
@@ -17,9 +17,36 @@ export function isFrameBlack(img, { threshold = 16, sample = 32 } = {}) {
       n += 1;
     }
     if (!n) return true;
-    return (sum / n / 3) < threshold;
+    if ((sum / n / 3) < threshold) return true;
+    // Site chrome can be bright while the game renderer is an empty dark panel.
+    // Inspect the game-relative centre, excluding the header, footer and sidebars.
+    // Covered Mines tiles are dark too, but their grid has variance and edges;
+    // darkness alone must never label that static, healthy board as missing.
+    const size = Math.max(64, sample);
+    const centre = createCanvas(size, size);
+    const ctx = centre.getContext('2d');
+    ctx.drawImage(img, w * 0.25, h * 0.2, w * 0.5, h * 0.48, 0, 0, size, size);
+    const pixels = ctx.getImageData(0, 0, size, size).data;
+    const levels = new Float64Array(size * size);
+    let total = 0, squares = 0, edges = 0, pairs = 0;
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const k = y * size + x, i = k * 4;
+      const level = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
+      levels[k] = level;
+      total += level;
+      squares += level * level;
+      if (x) { edges += Math.abs(level - levels[k - 1]); pairs++; }
+      if (y) { edges += Math.abs(level - levels[k - size]); pairs++; }
+    }
+    const mean = total / levels.length;
+    const variance = Math.max(0, squares / levels.length - mean * mean);
+    // A cursor-sized bright speck can dominate variance on an otherwise empty
+    // renderer. Require distributed texture, not a single outlier, for health.
+    const sorted = levels.slice().sort();
+    const spread = sorted[Math.floor(sorted.length * 0.99)] - sorted[Math.floor(sorted.length * 0.01)];
+    return mean < 80 && (variance < 9 || spread < 8) && edges / pairs < 3;
   } catch {
-    return false;
+    return true;
   }
 }
 

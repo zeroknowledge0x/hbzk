@@ -6,6 +6,7 @@ import { log } from './log.js';
 import { getBrowser } from './browser.js';
 import {
   createKickApiDedupe,
+  createKickDeliveryDedupe,
   createKickDedupe,
   formatChatSkip,
   ingestKickApiMessages,
@@ -21,7 +22,17 @@ const EMPTY_RELOAD_MS = 90 * 1000;
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 export class KickChat {
-  constructor({ channel, onMessage }) {
+  constructor({ channel, onMessage, fetchImpl = globalThis.fetch, browserProvider = getBrowser, timers = globalThis }) {
+    this.fetch = fetchImpl;
+    this.getBrowser = browserProvider;
+    this.timers = timers;
+    this.started = false;
+    this.apiBusy = false;
+    this.domBusy = false;
+    this.openBusy = false;
+    this.recoveryTimer = null;
+    this.watchTimer = null;
+    this.delivery = createKickDeliveryDedupe();
     this.channel = (channel || '').toLowerCase().replace(/^#/, '');
     this.onMessage = onMessage;
     this.channelId = null;
@@ -42,6 +53,8 @@ export class KickChat {
   }
 
   start() {
+    if (this.started || this.stopped) return this;
+    this.started = true;
     if (!this.channel) { log('chat(kick): KICK_CHANNEL empty - no chat input'); return this; }
     this.#boot();
     return this;
@@ -61,7 +74,7 @@ export class KickChat {
 
   async #resolveChannel() {
     const url = `https://kick.com/api/v2/channels/${encodeURIComponent(this.channel)}`;
-    const res = await fetch(url, {
+    const res = await this.fetch(url, {
       headers: { Accept: 'application/json', 'User-Agent': UA },
       signal: AbortSignal.timeout(15000),
     });
@@ -74,13 +87,20 @@ export class KickChat {
   }
 
   #pollApi() {
-    clearInterval(this.timer);
+    if (this.stopped) return;
+    this.timers.clearInterval(this.timer);
     this.mode = 'api';
-    this.timer = setInterval(() => { this.#tickApi().catch(() => {}); }, API_POLL_MS);
+    this.timer = this.timers.setInterval(() => { this.#tickApi().catch(() => {}); }, API_POLL_MS);
     this.#tickApi().catch(() => {});
   }
 
   async #tickApi() {
+    if (this.stopped || this.mode !== 'api' || this.apiBusy) return;
+    this.apiBusy = true;
+    try { await this.#readApi(); } finally { this.apiBusy = false; }
+  }
+
+  async #readApi() {
     if (this.stopped) return;
     if (!this.channelId) {
       try { await this.#resolveChannel(); } catch (err) {
@@ -96,12 +116,13 @@ export class KickChat {
     const now = Date.now();
     try {
       const url = `https://kick.com/api/v2/channels/${this.channelId}/messages`;
-      const res = await fetch(url, {
+      const res = await this.fetch(url, {
         headers: { Accept: 'application/json', 'User-Agent': UA },
         signal: AbortSignal.timeout(12000),
       });
       if (!res.ok) throw new Error(`messages ${res.status}`);
       const body = await res.json();
+      if (this.stopped || this.mode !== 'api') return;
       const messages = body?.data?.messages || body?.messages || [];
       this.apiFails = 0;
       this.pollErrors = 0;
@@ -112,6 +133,7 @@ export class KickChat {
         return;
       }
       for (const row of batch.fresh) {
+        if (this.stopped || !this.delivery.accept(row, 'api', now)) continue;
         this.lastRowAt = now;
         try {
           this.onMessage?.({ name: row.name.slice(0, 40), text: row.text.slice(0, 300), id: row.id });
@@ -139,15 +161,21 @@ export class KickChat {
     if (this.stopped || this.domArmed) return;
     this.domArmed = true;
     this.mode = 'dom';
-    clearInterval(this.timer);
+    this.timers.clearInterval(this.timer);
     this.timer = null;
     log(`chat(kick): DOM fallback (${reason})`);
     this.#openDom();
   }
 
   async #openDom() {
-    if (this.stopped) return;
-    const browser = await getBrowser();
+    if (this.stopped || this.mode !== 'dom' || this.openBusy) return;
+    this.openBusy = true;
+    try { await this.#openDomPage(); } finally { this.openBusy = false; }
+  }
+
+  async #openDomPage() {
+    const browser = await this.getBrowser();
+    if (this.stopped || this.mode !== 'dom') return;
     if (!browser) { log('chat(kick): no browser available - chat disabled'); return; }
     try {
       if (this.page) {
@@ -168,7 +196,10 @@ export class KickChat {
       this.pollErrors = 0;
       this.lastRowAt = Date.now();
       this.#pollDom();
-      this.page.on('close', () => this.#recoverDom('page-close'));
+      const opened = this.page;
+      this.page.on('close', () => {
+        if (this.page === opened && this.mode === 'dom') this.#recoverDom('page-close');
+      });
       // Keep trying API in background; flip back when it works again.
       this.#watchApiRecovery();
     } catch (err) {
@@ -178,47 +209,59 @@ export class KickChat {
   }
 
   #watchApiRecovery() {
+    this.timers.clearTimeout(this.watchTimer);
     const tick = async () => {
+      this.watchTimer = null;
       if (this.stopped || this.mode !== 'dom') return;
       try {
         if (!this.channelId) await this.#resolveChannel();
         const url = `https://kick.com/api/v2/channels/${this.channelId}/messages`;
-        const res = await fetch(url, {
+        const res = await this.fetch(url, {
           headers: { Accept: 'application/json', 'User-Agent': UA },
           signal: AbortSignal.timeout(10000),
         });
         if (!res.ok) throw new Error(String(res.status));
+        if (this.stopped || this.mode !== 'dom') return;
         log('chat(kick): api recovered — leaving DOM fallback');
+        // Invalidate DOM callbacks BEFORE closing; close emits synchronously.
+        this.mode = 'api';
         this.domArmed = false;
         this.apiFails = 0;
-        try { await this.page?.close(); } catch { /* ignore */ }
+        this.timers.clearTimeout(this.recoveryTimer);
+        this.recoveryTimer = null;
+        const page = this.page;
         this.page = null;
-        clearInterval(this.timer);
+        try { await page?.close(); } catch { /* ignore */ }
         this.#pollApi();
         return;
       } catch { /* still broken */ }
-      setTimeout(tick, 20000);
+      if (!this.stopped && this.mode === 'dom') this.watchTimer = this.timers.setTimeout(tick, 20000);
     };
-    setTimeout(tick, 15000);
+    this.watchTimer = this.timers.setTimeout(tick, 15000);
   }
 
   #recoverDom(reason = 'unknown') {
-    if (this.stopped) return;
-    clearInterval(this.timer);
+    if (this.stopped || this.mode !== 'dom' || this.recoveryTimer !== null) return;
+    this.timers.clearInterval(this.timer);
     this.timer = null;
     log(`chat(kick): recovering DOM (${reason}) in ${this.backoff} ms`);
-    setTimeout(() => this.#openDom(), this.backoff);
+    this.recoveryTimer = this.timers.setTimeout(() => {
+      this.recoveryTimer = null;
+      this.#openDom();
+    }, this.backoff);
     this.backoff = Math.min(this.backoff * 2, 120000);
   }
 
   #pollDom() {
-    clearInterval(this.timer);
-    this.timer = setInterval(async () => {
-      if (this.stopped || !this.page) return;
+    this.timers.clearInterval(this.timer);
+    this.timer = this.timers.setInterval(async () => {
+      if (this.stopped || this.mode !== 'dom' || !this.page || this.domBusy) return;
+      this.domBusy = true;
       const now = Date.now();
       try {
         await this.#pinLatest();
         const rows = await this.#scrape();
+        if (this.stopped || this.mode !== 'dom') return;
         if (!rows || rows.ok === false) {
           this.pollErrors += 1;
           if (this.pollErrors === 1 || this.pollErrors % 20 === 0) {
@@ -253,6 +296,7 @@ export class KickChat {
         const batch = ingestKickRows(this.domDedupe, parsed, now);
         for (const row of batch.skipped) log(formatChatSkip(row));
         for (const row of batch.fresh) {
+          if (this.stopped || !this.delivery.accept(row, 'dom', now)) continue;
           this.lastRowAt = now;
           try {
             this.onMessage?.({ name: row.name.slice(0, 40), text: row.text.slice(0, 300) });
@@ -271,6 +315,7 @@ export class KickChat {
           this.#recoverDom('poll-errors');
         }
       }
+      finally { this.domBusy = false; }
     }, DOM_POLL_MS);
   }
 
@@ -340,7 +385,11 @@ export class KickChat {
 
   stop() {
     this.stopped = true;
-    clearInterval(this.timer);
-    this.page?.close().catch(() => {});
+    this.timers.clearInterval(this.timer);
+    this.timers.clearTimeout(this.watchTimer);
+    this.timers.clearTimeout(this.recoveryTimer);
+    const page = this.page;
+    this.page = null;
+    page?.close().catch(() => {});
   }
 }

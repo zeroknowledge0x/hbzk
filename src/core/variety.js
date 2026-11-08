@@ -43,13 +43,15 @@ export function varietyPlay(game, controls, rand = Math.random) {
   const g = String(game || '');
   const list = controls || [];
   const has = (re) => list.some((c) => re.test(String(c || '')));
-  const cashLive = list.some((c) => /cash out/i.test(String(c)) && !/\$?\s*0\.00/.test(String(c)));
+  const cashLive = list.some((c) => /^cash out\b/i.test(String(c)));
   if (/hilo/i.test(g)) {
-    return pickOne(['Higher', 'Lower', 'Skip'].filter((n) => has(new RegExp(n, 'i'))), rand) || 'Higher';
+    return pickOne(['Higher', 'Lower', 'Skip', 'Cash out'].filter((n) => has(new RegExp(`^${n}\\b`, 'i'))), rand) || 'Bet';
   }
+  if (/blackjack/i.test(g) && has(/^no thanks$/i)) return 'No thanks';
   if (/blackjack/i.test(g) && has(/^hit$/i)) return rand() < 0.55 ? 'Hit' : 'Stand';
   if ((/tower|mines/i.test(g)) && cashLive && rand() < 0.35) return 'Cash out';
   if ((/tower|mines|road/i.test(g)) && has(/random pick/i) && !has(/^bet$/i) && !has(/^go$/i)) return 'Random pick';
+  if (/road/i.test(g) && has(/^bet$/i)) return 'Bet';
   if (/road/i.test(g) && has(/^go\b/i)) return 'GO';
   if (has(/^go$/i) && !has(/^bet$/i)) return 'GO';
   return 'Bet';

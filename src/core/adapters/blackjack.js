@@ -3,7 +3,7 @@
 const NAME = 'Blackjack';
 const SLUG = 'housegames-blackjack';
 const SETTINGS = {};
-const START_LABELS = ['Bet', 'Deal', 'Hit', 'Stand'];
+const START_LABELS = ['No thanks', 'Bet', 'Deal', 'Hit', 'Stand'];
 
 function controlsOf(tools) {
   const world = tools?.world;

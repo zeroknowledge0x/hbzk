@@ -23,6 +23,7 @@ function makeTools() {
 
 function makeGame() {
   return {
+    async setStake() { return { ok: true, verified: true, observed: 0 }; },
     getReport() {
       return { round: 1, result: 'win', payout: 2 };
     },
@@ -281,7 +282,7 @@ describe('Controller', () => {
       await ctrl.tick(); // await_result
 
       assert.equal(ctrl._completed, 1);
-      assert.equal(rotation.names.length, 1);
+      assert.equal(rotation.names.length, 0); // completion must not reset rotation deadline
     });
 
     it('does not count completion when await_result fails', async () => {
@@ -491,7 +492,7 @@ describe('Controller', () => {
     it('captures world+report before round click', async () => {
       const world = new World({ game: 'Dice', controls: ['Bet'], phase: 'idle', round: 3 });
       const tools = makeTools();
-      const game = { getReport: () => ({ round: 3, result: null }) };
+      const game = { ...makeGame(), getReport: () => ({ round: 3, result: null }) };
       const planner = new Planner({ tools, world, log: () => {} });
       const speak = makeSpeak();
 

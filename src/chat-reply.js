@@ -2,7 +2,27 @@
 // Kick DOM rows are parsed here so a virtualized row that only exposes innerText
 // still becomes a real viewer message. Self is an exact handle (hubie / hubiezk),
 // never a prefix — LiveHubi is a viewer.
-import { parseGameRequest } from './play-queue.js';
+import { parseGameRequest, pickRandomGame } from './play-queue.js';
+import { parseIntent } from './core/intents.js';
+
+// One routing boundary: game intents never escape directly to the controller.
+// Intake screening and presentation belong to the caller; this helper only routes.
+export function routeChatRequest(message, { queue, currentGame, randomGame = pickRandomGame } = {}) {
+  const text = String(message?.text || '').replace(/^!+/, '');
+  const game = parseGameRequest(text);
+  if (game) {
+    const chosen = game === '__random__' ? randomGame(currentGame) : game;
+    const item = queue?.enqueue({ name: message?.name, game: chosen, from: 'chat' });
+    return item ? { action: 'queue', item } : { action: 'skip', reason: 'queue_unavailable' };
+  }
+  const intent = parseIntent(text);
+  if (intent) return { action: 'command', intent };
+  const tune = parseTuneRequest(text);
+  if (tune) {
+    return { action: 'command', intent: { kind: tune.kind === 'chance' ? 'set_win_chance' : 'set_multiplier', args: { value: tune.value } } };
+  }
+  return { action: 'reply' };
+}
 
 export const REPLY_BRAIN_TIMEOUT_MS = 3500;
 export const REPLY_PENDING_MAX = 30;
@@ -12,7 +32,8 @@ const BOTS = new Set([
   'nightbot', 'streamelements', 'streamlabs', 'fossabot', 'moobot', 'botrix',
   'kickbot', 'kicksbot', 'serybot', 'soundalerts', 'wizebot',
 ]);
-const PROMO = /bot\s*liva|!noads|\bno\s*ads\b|our\s+ai\s+service|make your stream fire|chat stays online|t\.me\/|discord\.gg|\bhttps?:\/\/|\bwww\.|bit\.ly|promo code/i;
+// Only explicit solicitation fingerprints identify a promo sender; a link is not evidence.
+const PROMO = /bot\s*liva|!noads|our\s+ai\s+service|make your stream fire|chat stays online|\b(?:use|claim)\s+(?:my|our)\s+promo code/i;
 const EMOTE = /^(?:lol+|lmao+|lmfao+|kekw?|pog+|omg+|haha+|hehe+|gg+|wp|ez|rip|oof|bruh|lul|xd+|ayy+|f|w+|l+)$/i;
 const PURE_GREET = /^(?:hi+|hello+|hey+|yo+|gm|good\s*morning|halo|hai|bye+|goodbye|good\s*night|gn|later|cya|see\s*ya)[!.,\s]*$/i;
 
@@ -51,7 +72,6 @@ export function isBotName(name) {
 export function isPromoText(text) {
   const t = clean(text);
   if (!t) return false;
-  if (/^!/.test(t) && !parseGameRequest(t.replace(/^!+/, ''))) return true;
   return PROMO.test(t);
 }
 
@@ -139,18 +159,25 @@ export function cannedAck(name) {
 
 export async function composeChatReply(m, { brain, jevReply, timeoutMs = REPLY_BRAIN_TIMEOUT_MS } = {}) {
   const known = factReply(m?.text, m?.name);
-  if (known) return { text: known, emotion: null, gesture: null, source: 'kb' };
   const ack = () => cannedAck(m?.name);
+  // The brain already reads its KB as a FACTS system block. Expose the same trusted
+  // context to alternate brains without changing or laundering the viewer's text.
+  const payload = known ? { ...m, trustedFacts: [known] } : m;
+  const missedFact = (text) => known && /housebets\.com/i.test(known) && !/housebets\.com/i.test(text || '');
   if (brain && !brain.offline && typeof brain.say === 'function') {
-    const shaped = await brain.say('reply', m, { timeoutMs });
+    let shaped;
+    try { shaped = await brain.say('reply', payload, { timeoutMs }); } catch { shaped = null; }
     if (shaped?.timeout) {
+      if (known) return { text: known, emotion: null, gesture: null, source: 'kb', reason: 'timeout' };
       return { text: ack(), emotion: null, gesture: null, source: 'canned', reason: 'timeout' };
     }
-    if (shaped?.text && !shaped.fallback) return { ...shaped, source: 'brain' };
+    if (shaped?.text && !shaped.fallback && !missedFact(shaped.text)) return { ...shaped, source: 'brain' };
+    if (known) return { text: known, emotion: null, gesture: null, source: 'kb' };
     const entry = typeof jevReply === 'function' ? await jevReply(m) : null;
     if (entry?.text) return { text: clean(entry.text), emotion: null, gesture: null, source: 'kb' };
     return { text: shaped?.text || ack(), emotion: null, gesture: null, source: 'canned' };
   }
+  if (known) return { text: known, emotion: null, gesture: null, source: 'kb' };
   const entry = typeof jevReply === 'function' ? await jevReply(m) : null;
   if (entry?.text) return { text: clean(entry.text), emotion: null, gesture: null, source: 'kb' };
   const shaped = brain && typeof brain.say === 'function' ? await brain.say('reply', m) : null;
@@ -253,7 +280,7 @@ export function parseKickRow(raw = {}) {
   if (!text && lines.length >= 2) text = clean(lines.slice(1).join(' '));
   if (name && text.toLowerCase().startsWith(`${name.toLowerCase()}:`)) {
     text = text.slice(name.length + 1).trim();
-  } else if (name && text.toLowerCase().startsWith(name.toLowerCase()) && text.length > name.length + 1) {
+  } else if (name && text.toLowerCase().startsWith(name.toLowerCase()) && /^[\s:.\-]/.test(text.slice(name.length))) {
     const stripped = text.slice(name.length).replace(/^[\s:.\-]+/, '').trim();
     if (stripped && stripped !== text) text = stripped;
   }
@@ -271,6 +298,26 @@ function pruneDedupe(state, now) {
   for (const [key, at] of state.emittedAt) {
     if (now - at > state.dedupeMs * 4 && !state.live.has(key)) state.emittedAt.delete(key);
   }
+}
+
+// Shared delivery ledger across API and DOM. API ids distinguish genuinely new
+// repeated messages; a DOM fingerprint can only consume one matching API event.
+export function createKickDeliveryDedupe({ dedupeMs = 20000 } = {}) {
+  const recent = new Map();
+  const ids = new Map();
+  return { accept(row, source, now = Date.now()) {
+    for (const [key, entry] of recent) if (now - entry.at >= dedupeMs) recent.delete(key);
+    for (const [id, at] of ids) if (now - at >= dedupeMs * 4) ids.delete(id);
+    const key = `${normHandle(row.name)}|${clean(row.text)}`;
+    const prev = recent.get(key);
+    if (row.id) {
+      if (ids.has(row.id)) return false;
+      ids.set(row.id, now);
+    }
+    const duplicate = prev && (source !== 'api' || prev.source === 'dom');
+    recent.set(key, { source, at: now });
+    return !duplicate;
+  } };
 }
 
 export function createKickDedupe({ dedupeMs = 20000 } = {}) {

@@ -15,10 +15,13 @@ const GAME_TABLE = [
   ['dragon tower', ['dragon tower', 'dragon', 'tower']],
   ['hilo', ['hilo', 'hi lo', 'high low']],
   ['blackjack', ['blackjack', 'black jack', 'bj']],
+  ["hubie's road", ["hubie's road", 'hubies road', 'hubie s road']],
+  ['limbo', ['crash']],
 ];
 
 /** Canonical game slugs; adapters key their tables off these. */
-export const GAMES = GAME_TABLE.map(([game]) => game);
+// Controller contract games; Road is queue-routed until a controller adapter exists.
+export const GAMES = [...new Set(GAME_TABLE.map(([game]) => game))].filter(game => game !== "hubie's road");
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -40,7 +43,7 @@ function normalise(text) {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/@[a-z0-9_]+/g, ' ') // a mention is an address, not a command word
-    .replace(/\bhubie\b/g, ' ')
+    .replace(/\bhubie\b(?![’']?s?\s+(?:s\s+)?road\b)/g, ' ')
     .replace(/[^\p{L}\p{N}%. ]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();

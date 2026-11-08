@@ -37,12 +37,13 @@ export class Knowledge {
     try {
       const { DatabaseSync } = require('node:sqlite');
       const db = new DatabaseSync(file, { readOnly: true });
-      const rows = db.prepare('SELECT id, title, tags, text FROM facts').all();
+      const rows = db.prepare('SELECT id, title, tags, text, source FROM facts').all();
       if (!rows.length) return;
       this.entries = rows.map((row) => ({
         id: row.id,
         title: row.title || '',
         text: row.text || '',
+        source: row.source || '',
         tags: String(row.tags || '').toLowerCase().split(/\s+/).filter(Boolean),
       }));
     } catch { /* json entries stay */ }

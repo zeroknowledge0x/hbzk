@@ -21,6 +21,9 @@ export class OpsLoop {
     this.timer = null;
     this.llmTimer = null;
     this.busy = false;
+    this.captureRecovery = null;
+    this.captureStage = 'rearm';
+    this.lastCaptureReloadAt = null;
   }
 
   start() {
@@ -40,18 +43,57 @@ export class OpsLoop {
   }
 
   async watchCapture() {
+    if (this.captureRecovery) return;
     const img = this.game?.frame;
     const age = Number(this.game?.frameAgeMs);
     const black = isFrameBlack(img);
-    const stale = age < 0 || age > 2500;
+    const stale = !Number.isFinite(age) || age < 0 || age > 2500;
     if (black || stale) this.blackStreak += 1;
-    else this.blackStreak = 0;
+    else {
+      this.blackStreak = 0;
+      this.captureStage = 'rearm';
+    }
     if (this.blackStreak < 5) return;
     this.blackStreak = 0;
-    this.log(`ops: capture dead (black=${black} age_ms=${age}) — revive`);
-    if (typeof this.game?.reviveCapture === 'function') {
-      await this.game.reviveCapture();
-    }
+    await this.#recoverCapture();
+  }
+
+  #recoverCapture() {
+    if (this.captureRecovery) return this.captureRecovery;
+    const stage = this.captureStage;
+    if (stage === 'reload' && this.lastCaptureReloadAt != null
+      && this.now() - this.lastCaptureReloadAt < 60000) return Promise.resolve({ ok: false, error: 'cooldown' });
+    if (this.game) this.game.captureRecoveryInFlight = true;
+    this.captureRecovery = Promise.resolve().then(async () => {
+      this.log(`ops: capture unhealthy — ${stage}`);
+      let result;
+      if (stage === 'reload') {
+        this.lastCaptureReloadAt = this.now();
+        const after = Date.now();
+        const reload = await this.game?.reload?.(); // Same page, never a table cycle.
+        // Healthy pixels cannot override a failed source-table verification.
+        const capture = await this.game?.waitForCapture?.({ after, timeoutMs: 8000 });
+        result = { ok: reload?.ok === true && capture?.ok === true };
+      } else {
+        this.captureStage = 'reload';
+        result = await this.game?.reviveCapture?.();
+      }
+      const age = Number(this.game?.frameAgeMs);
+      const healthy = result?.ok === true && Number.isFinite(age) && age >= 0 && age <= 2500
+        && !isFrameBlack(this.game?.frame);
+      if (healthy) {
+        this.captureStage = 'rearm';
+        this.log(`ops: capture restored (verified ${stage})`);
+      } else this.log(`ops: capture still unhealthy after ${stage}`);
+      return { ok: healthy, via: stage };
+    }).catch((err) => {
+      this.log(`ops: capture recovery failed (${err?.message || err})`);
+      return { ok: false, error: String(err?.message || err) };
+    }).finally(() => {
+      if (this.game) this.game.captureRecoveryInFlight = false;
+      this.captureRecovery = null;
+    });
+    return this.captureRecovery;
   }
 
   report() {
@@ -105,7 +147,7 @@ export class OpsLoop {
     if (!d || d === 'noop') return;
     this.log(`ops: do=${d} why=${op.why || ''}`);
     if (d === 'rearm_capture' && typeof this.game?.reviveCapture === 'function') {
-      await this.game.reviveCapture();
+      await this.#recoverCapture();
       return;
     }
     if (d === 'play_now' || d === 'cycle_table') {

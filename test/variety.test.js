@@ -21,8 +21,8 @@ test('Hilo play is Higher, Lower, or Skip, never Bet Info', () => {
   assert.equal(seen.has('Bet'), false);
 });
 
-test('Cash out at zero does not match', () => {
-  assert.equal(labelMatchesPlay('Cash out', 'Cash out $ 0.00'), false);
+test('Cash out at zero matches demo cashout', () => {
+  assert.equal(labelMatchesPlay('Cash out', 'Cash out $ 0.00'), true);
   assert.equal(labelMatchesPlay('Cash out', 'Cash out $ 1.20'), true);
   assert.equal(labelMatchesPlay('Random pick', 'Random pick a random tile on the next floor (R)'), true);
   assert.equal(labelMatchesPlay('Bet', 'Bet Info'), false);

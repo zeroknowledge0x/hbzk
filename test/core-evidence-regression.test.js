@@ -442,24 +442,27 @@ test('click Play blocked when readSettings shows nonzero stake', async () => {
   assert.equal(res.ok, false);
 });
 
-test('min bet button is NOT a dangerous label and does not require zero stake', async () => {
+// Site minimum/half controls mutate stake; unlike round actions they are always denied.
+test('min bet button is denied as a stake modifier', async () => {
   const { tools, game } = setup({ stake: 5, controls: ['Bet', 'Roll', 'Manual', 'Min bet'] }, {
     readSettings() {
       return { stake: 5 };
     },
   });
   const res = await tools.run('click', { label: 'Min bet' });
-  assert.equal(res.ok, true);
+  assert.equal(res.ok, false);
+  assert.deepEqual(game.calls.filter((c) => c[0] === 'clickText'), []);
 });
 
-test('half bet button is NOT a dangerous label', async () => {
+test('half bet button is denied as a stake modifier', async () => {
   const { tools, game } = setup({ stake: 5, controls: ['Bet', 'Roll', 'Manual', '1/2 bet'] }, {
     readSettings() {
       return { stake: 5 };
     },
   });
   const res = await tools.run('click', { label: '1/2 bet' });
-  assert.equal(res.ok, true);
+  assert.equal(res.ok, false);
+  assert.deepEqual(game.calls.filter((c) => c[0] === 'clickText'), []);
 });
 
 // =============================================================================

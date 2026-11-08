@@ -26,6 +26,7 @@ export class Controller {
     this._active = false;
     this._snapshot = null;
     this._completed = 0;
+    this._demoAttempts = 0;
     this._lastShotTalk = 0;
   }
 
@@ -48,6 +49,7 @@ export class Controller {
       paused: this._paused,
       active: this._active,
       completed: this._completed,
+      demoAttempts: this._demoAttempts,
       goal: p.goal,
       step: p.step,
       total: p.total,
@@ -69,6 +71,7 @@ export class Controller {
 
   async _handle(intent, msg) {
     if (!intent || !intent.kind) return;
+    if (this._recovering() && !['stop', 'status'].includes(intent.kind)) return;
 
     switch (intent.kind) {
       case 'change_game':
@@ -117,6 +120,7 @@ export class Controller {
     this.planner.reset('change_game');
     this._active = false;
     this._snapshot = null;
+    this._deferredStep = null;
 
     // Set new goal — do NOT speak "done" prematurely
     const rounds = intent.args?.rounds || 1;
@@ -190,6 +194,7 @@ export class Controller {
     this.planner.reset('stop');
     this._active = false;
     this._snapshot = null;
+    this._deferredStep = null;
     this.pause();
     this.speak('stopped', msg);
   }
@@ -207,6 +212,8 @@ export class Controller {
   }
 
   async _handleStartRound(intent, msg) {
+    const zero = await this._verifyZeroStake();
+    if (!zero.ok) { this.speak(zero.error, msg); return; }
     // Single Bet click — capture snapshot before
     const snapshot = this._captureSnapshot();
     let r;
@@ -226,6 +233,8 @@ export class Controller {
   }
 
   async _handleAction(intent, msg) {
+    const zero = await this._verifyZeroStake();
+    if (!zero.ok) { this.speak(zero.error, msg); return; }
     const labels = {cash_out: 'Cash out', higher: 'Higher', lower: 'Lower', hit: 'Hit', stand: 'Stand'};
     const label = labels[intent.kind] || intent.kind;
     let r;
@@ -247,16 +256,11 @@ export class Controller {
   // ── tick: process one planner step ─────────────────────────────────────────
 
   async _tick() {
-    if (this._paused) return;
+    if (this._paused || this._recovering()) return;
     if (!this._active) {
       const asked = this.playQueue?.peek?.();
       if (asked && this.playable.has(String(asked.game).toLowerCase())) {
         const now = Date.now();
-        const current = String(this.world?.get?.()?.game || '').toLowerCase();
-        const want = String(asked.game).toLowerCase();
-        if (this.playQueue.size > 1 && asked.startedAt && !this.playQueue.due(now) && current === want) {
-          return;
-        }
         if (this.playQueue.size > 1 && this.playQueue.due(now)) this.playQueue.shift();
         const next = this.playQueue.peek();
         if (!next) return;
@@ -279,7 +283,7 @@ export class Controller {
       this._active = true;
     }
 
-    const step = this.planner.tick();
+    const step = this._deferredStep || this.planner.tick();
     if (!step) {
       // Planner finished or failed
       const st = this.planner.status();
@@ -302,6 +306,12 @@ export class Controller {
     }
 
     // Settle the planner with the result (await tool only once per tick)
+    if (result?.deferred) {
+      // Keep this exact step pending without spending retry/fallback budget.
+      this._deferredStep = step;
+      return;
+    }
+    this._deferredStep = null;
     this.planner.settle(result);
 
     // Check post-settle state
@@ -315,10 +325,8 @@ export class Controller {
 
     // Only count completion when await_result succeeded
     if (step.kind === 'await_result' && result && result.ok) {
-      this._completed += 1;
-      if (this.rotation && typeof this.rotation.next === 'function') {
-        this.rotation.arm();
-      }
+      if (result.skipped || result.reason === 'demo-click') this._demoAttempts += 1;
+      else this._completed += 1;
     }
 
     if (st.done) {
@@ -326,12 +334,19 @@ export class Controller {
     }
   }
 
+  _recovering() { return !!(this.game?.captureRecoveryInFlight || this.game?.recoveryInFlight); }
+
   async _executeStep(step) {
+    if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
     switch (step.kind) {
       case 'enter_game': {
         const phase = this.world?.get?.()?.phase;
         if (phase === 'playing') {
-          this.log('controller: already in a round — play this table, do not swap');
+          const actual = this.world?.get?.()?.game;
+          if (byName(actual)?.name !== byName(step.args?.game)?.name) {
+            await this._playTable({ ...step, game: actual });
+            return { ok: false, deferred: true, reason: 'in-round', error: 'Waiting for current table before switch' };
+          }
           return { ok: true, skipped: true, reason: 'in-round' };
         }
         return this.tools.run('change_game', step.args);
@@ -368,15 +383,30 @@ export class Controller {
     }
   }
 
+  async _verifyZeroStake() {
+    if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
+    if (typeof this.game?.setStake !== 'function') return { ok: false, error: 'No verified stake control' };
+    try {
+      const r = await this.game.setStake(0);
+      if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
+      if (r?.ok === true && r.verified === true && r.observed === 0
+        && (r.settings?.stake === undefined || r.settings.stake === 0)) return r;
+      return { ok: false, error: r?.error || 'Zero stake readback mismatch' };
+    } catch (err) { return { ok: false, error: err.message }; }
+  }
+
   async _playTable(step) {
+    const zero = await this._verifyZeroStake();
+    if (!zero.ok) return zero;
     this._snapshot = this._captureSnapshot();
-    const gameName = this.planner.status().goal?.game;
+    const gameName = this.world?.get?.()?.phase === 'playing'
+      ? this.world.get().game : (step.game || this.planner.status().goal?.game);
     const adapter = byName(gameName);
     if (adapter?.pick === 'tile' && typeof this.game?.clickMinesTile === 'function') {
       const tile = await this.game.clickMinesTile();
       if (tile?.ok) {
         await this._snapPlay(tile.text || 'tile');
-        return { ok: true, detail: tile };
+        if (this.world?.get?.()?.phase === 'playing') return { ok: true, detail: tile };
       }
     }
     if (adapter?.pick === 'number' && typeof this.game?.clickText === 'function') {
@@ -384,10 +414,10 @@ export class Controller {
         .sort(() => Math.random() - 0.5)
         .slice(0, 2 + Math.floor(Math.random() * 3));
       for (const n of spots) {
+        if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
         const spot = await this.game.clickText(String(n)).catch(() => null);
         if (spot?.ok) {
           await this._snapPlay(String(n));
-          break;
         }
       }
     }
@@ -397,13 +427,13 @@ export class Controller {
     if (!this.variety || this.variety.game !== gameName || (phase === 'idle' && this.variety.done)) {
       this.variety = { game: gameName, chips: varietyClicks(gameName, controls), at: 0, done: false };
     }
-    if (phase === 'idle' && this.variety.at < this.variety.chips.length && typeof this.game?.clickText === 'function') {
+    while (phase === 'idle' && this.variety.at < this.variety.chips.length && typeof this.game?.clickText === 'function') {
+      if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
       const chip = this.variety.chips[this.variety.at++];
       const hit = await this.game.clickText(chip).catch(() => null);
       if (hit?.ok) {
         this.log(`controller: variety "${chip}"`);
         await this._snapPlay(chip);
-        return { ok: true, detail: hit };
       }
     }
     if (phase === 'idle') this.variety.done = true;
@@ -419,17 +449,9 @@ export class Controller {
         controls.some((c) => labelMatchesPlay(label, c)));
       if (present.length) labels = present;
     }
-    const prev = this.game?.lastPointer;
-    const prevText = String(prev?.text || '').toLowerCase();
-    const stuck = prev?.at && Date.now() - prev.at < 8000
-      && /^(random pick|cash out|higher|lower|hit|stand)$/.test(prevText);
-    if (stuck) {
-      const start = labels.filter((l) => /^(bet|go|roll|deal|spin|play|start)$/i.test(String(l)));
-      const rest = labels.filter((l) => !start.includes(l) && String(l).toLowerCase() !== prevText);
-      labels = [...start, ...rest];
-    }
     let last = { ok: false, error: 'no play control' };
     for (const label of labels) {
+      if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
       if (typeof this.game?.clickText === 'function') {
         const raw = await this.game.clickText(label).catch(() => null);
         if (raw?.ok) {

@@ -16,16 +16,16 @@
 //    concurrent callers. post() always sees the correct current.args.
 //  - change_game: exact pathname match /games/${slug} from byName registry. No substring.
 //    When getReport() exists, stale world is never used as fallback.
-//  - Click safety: dangerous labels (Bet/Roll/Deal/Spin/Play/Cash out) require zero-stake
-//    confirmation via readSettings(). Without readSettings, world stake must be 0.
-//    Min-bet and half-bet buttons are NOT dangerous labels and do not alter stake.
+//  - Click safety: round actions require known zero stake; a failed/unknown fresh
+//    readback never falls back to cached world state. Money/stake modifiers are denied.
 
 const MAX_TEXT = 400;
 const MAX_STAKE = 1e9;
 const MAX_MULTIPLIER = 1000;
 const SETTLED = new Set(['idle', 'betting', 'result', 'unknown']);
 
-const DANGEROUS_LABELS = new Set(['bet', 'roll', 'deal', 'spin', 'play', 'cash out']);
+const DANGEROUS_LABELS = new Set(['bet', 'roll', 'deal', 'spin', 'play', 'cash out', 'go', 'start', 'double', 'split']);
+const BLOCKED_CLICKS = /\b(wallet|deposit|withdraw|half|halve|min(?:imum)?|max(?:imum)?|stake|wager|amount)\b|\bdouble\s+bet\b|^(?:1\s*\/\s*2|½|2\s*[×x])(?:\s*bet)?$/i;
 
 import { byName } from './adapters/index.js';
 
@@ -104,6 +104,7 @@ const TABLE = {
       const controls = Array.isArray(s.controls) ? s.controls : [];
       if (controls.length && !has(controls, label)) return `"${label}" is not on the table`;
 
+      if (BLOCKED_CLICKS.test(label)) return `money/stake modifier "${label}" blocked`;
       // Click safety for dangerous labels
       const foldedLabel = fold(label);
       const isDangerous = [...DANGEROUS_LABELS].some((dl) => fold(dl) === foldedLabel);
@@ -112,7 +113,7 @@ const TABLE = {
         // If it does not exist, check world stake === 0 (fail-closed).
         if (typeof this.game?.readSettings !== 'function') {
           const stake = num(s.stake);
-          if (stake !== null && stake !== 0) {
+          if (stake !== 0 || (typeof s.stake === 'string' && !s.stake.trim())) {
             return `dangerous label "${label}" blocked: stake is ${stake}, must be 0`;
           }
         }
@@ -127,19 +128,14 @@ const TABLE = {
       const isDangerous = [...DANGEROUS_LABELS].some((dl) => fold(dl) === foldedLabel);
       if (isDangerous && typeof this.game?.readSettings === 'function') {
         const settings = await readSettings(this);
-        if (settings === null) {
+        if (settings === null || settings.ok === false) {
           return { ok: false, error: `readSettings unavailable for dangerous label "${label}"` };
         }
         const observedStake = num(settings.stake);
-        if (observedStake !== null && observedStake !== 0) {
+        if (observedStake !== 0 || (typeof settings.stake === 'string' && !settings.stake.trim())) {
           return { ok: false, error: `dangerous label "${label}" blocked: observed stake ${observedStake}` };
         }
-        if (observedStake === null) {
-          const worldStake = num(snap(this.world).stake);
-          if (worldStake !== null && worldStake !== 0) {
-            return { ok: false, error: `dangerous label "${label}" blocked: world stake ${worldStake}` };
-          }
-        }
+
       }
 
       let out = await callGame(this, ['clickText', 'clickInGame'], label);

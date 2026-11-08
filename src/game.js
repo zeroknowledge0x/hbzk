@@ -9,6 +9,7 @@ import { DesktopGrab } from './desktop-grab.js';
 import { readSettings, setSetting, zeroStake } from './game-settings.js';
 import { log } from './log.js';
 import { isFrameBlack, shouldPumpCapture, pickLargestRect } from './capture-health.js';
+import { LocalRoundTracker, observeLocalRoundDom } from './round-events.js';
 
 const WAIT_MS = 1500;
 const UI_TTL_MS = 1000;
@@ -138,6 +139,13 @@ export class GameFeed {
           if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
           return !(r.bottom < 0 || r.right < 0 || r.top > window.innerHeight || r.left > window.innerWidth);
         };
+        const isEnabled = (el) => {
+          for (let node = el; node; node = node.parentElement || node.getRootNode?.().host) {
+            if (node.disabled || node.hasAttribute?.('disabled') || node.matches?.(':disabled')
+              || String(node.getAttribute?.('aria-disabled')).toLowerCase() === 'true') return false;
+          }
+          return true;
+        };
         // Short in-game controls must survive the 40-entry cap, so collect them first.
         const CONTROL = /^(?:place\s*)?bet$|^(?:roll|hit|stand|manual|auto|deal|cash\s*out|cashout|½|1\/2|2×|2x)$/i;
         const BET_FIELD = /bet|amount|wager|stake/i;
@@ -181,7 +189,7 @@ export class GameFeed {
         const rest = [];
         const seen = new Set();
         for (const el of deepAll(sel)) {
-          if (!isVisible(el)) continue;
+          if (!isVisible(el) || !isEnabled(el)) continue;
           const tag = el.tagName.toLowerCase();
           const type = (el.getAttribute('type') || 'text').toLowerCase();
           if (tag === 'input' && !/^(number|text|tel|button|submit)$/.test(type)) continue;
@@ -325,12 +333,22 @@ export class GameFeed {
         return { bodySnippet, title: document.title, clickables: [...priority, ...tiles, ...rest].slice(0, max), outcome };
       }, UI_MAX, process.env.HOUSEBETS_HANDLE || '');
       if (snap) {
+        let outcome = snap.outcome && !['generic', 'handle-row', 'live-bets'].includes(snap.outcome.source) ? snap.outcome : null;
+        try {
+          this.roundTracker = this.roundTracker || new LocalRoundTracker();
+          const samples = await page.evaluate(observeLocalRoundDom);
+          if (Array.isArray(samples)) {
+            let event = null;
+            for (const sample of samples) event = this.roundTracker.observe(sample) || event;
+            outcome = event;
+          }
+        } catch { /* keep the non-global snapshot outcome */ }
         this.ui = {
           at: Date.now(),
           body: String(snap.bodySnippet || '').slice(0, BODY_CHARS),
           title: String(snap.title || ''),
           clickables: Array.isArray(snap.clickables) ? snap.clickables : [],
-          outcome: snap.outcome || null,
+          outcome,
         };
       }
     } catch { /* page busy or navigating */ }
@@ -779,7 +797,7 @@ export class GameFeed {
           return !(st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0');
         };
         const BET = /bet|amount|wager/i;
-        const SHORT = 24;
+
         const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
         const rootOf = (el) => {
           try { const r = el.getRootNode?.(); return r?.querySelector ? r : document; } catch { return document; }
@@ -827,15 +845,7 @@ export class GameFeed {
           setNative(el, zero);
           set++;
         }
-        // A visible "0" / "min bet" control that clearly sets the floor.
-        for (const el of deepAll('button,[role="button"],a,input[type="button"],input[type="submit"]')) {
-          if (!isVisible(el)) continue;
-          const text = norm(`${el.innerText || ''} ${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''}`);
-          if (!text || text.length > SHORT) continue;
-          if (!/^0$|^min( bet)?$|min bet/i.test(text)) continue;
-          el.click();
-          break;
-        }
+
         return { set };
       }, zero);
       if (result?.refused) {
@@ -844,7 +854,14 @@ export class GameFeed {
       }
       const set = Number(result?.set) || 0;
       if (set > 0) log(`game: bet forced to 0 (${set} field${set === 1 ? '' : 's'})`);
-      return { ok: true, set };
+      // Keep the native zero setter above, then require an independent exact-field
+      // write/readback. A UI minimum or a clamped/unknown value is never proof of zero.
+      const verified = await zeroStake(this.page);
+      const settings = await this.readSettings();
+      const ok = verified?.ok === true && verified?.verified === true
+        && verified.observed === 0 && settings?.ok === true && settings.stake === 0;
+      return { ok, set, observed: settings?.stake ?? null, verified: ok, settings,
+        ...(ok ? {} : { error: verified?.error || 'zero stake readback failed' }) };
     } catch (err) {
       this.lastError = err.message;
       return { ok: false, set: 0, error: err.message };
@@ -1076,12 +1093,25 @@ export class GameFeed {
       log(`game: ${this.url} ready (${clear.title || await this.page.title()})`);
       this.lastError = null;
       await this.#snapshotLobby();
-      const entered = await this.#tryEnterDemo(this.page);
-      await this.#startScreencast(this.page);
-      if (entered) {
-        await delay(1500);
-        await this.ensureBetZero();
+      const slug = gameSlugFromUrl(this.page.url());
+      const wanted = Object.entries(GAME_CARD).find(([, name]) =>
+        name.toLowerCase() === String(this.preferredGame || '').trim().toLowerCase())?.[0];
+      if (!slug) {
+        if (this.preferredGame) {
+          const entered = await this.openGameByCard(this.preferredGame);
+          if (entered?.ok) {
+            await delay(1500);
+            await this.ensureBetZero();
+          }
+        }
+      } else if (wanted && wanted !== slug) {
+        const entered = await this.openGameByCard(this.preferredGame);
+        if (entered?.ok) {
+          await delay(1500);
+          await this.ensureBetZero();
+        }
       }
+      await this.#startScreencast(this.page);
       this.backoff = 5000;
     } catch (err) {
       this.lastError = err.message;
@@ -1188,38 +1218,59 @@ export class GameFeed {
   // waiting for a dead screencast to wake up after a navigation.
   async #cycleScreencast(page) {
     if (this.stopped || !page || page.isClosed?.()) return;
-    try { await this.client?.send('Page.stopScreencast'); } catch { /* gone */ }
-    try { this.client?.disconnect?.(); } catch { /* gone */ }
-    this.client = null;
-    this.screencasting = false;
-    this.firstFrameLogged = false;
-    this.markAt = 0;
-    log('game: screencast re-armed after navigation');
-    this.#startScreencast(page).catch(() => {});
+    if (this.cycleInFlight) return this.cycleInFlight;
+    this.cycleInFlight = (async () => {
+      const old = this.client;
+      this.client = null;
+      try { await old?.send('Page.stopScreencast'); } catch { /* gone */ }
+      try { old?.disconnect?.(); } catch { /* gone */ }
+      this.screencasting = false;
+      this.firstFrameLogged = false;
+      this.markAt = 0;
+      await this.#startScreencast(page);
+      log('game: screencast re-arm completed (pixels not yet verified)');
+    })().finally(() => { this.cycleInFlight = null; });
+    return this.cycleInFlight;
   }
 
-  async reviveCapture() {
-    const page = this.page;
-    if (!page || page.isClosed?.()) {
-      this.#recover();
-      return { ok: true, via: 'recover' };
-    }
-    await this.#cycleScreencast(page);
-    try {
-      const buf = await this.#screenshotIframe(page);
-      if (buf) {
-        const img = await loadImage(buf);
-        if (!isFrameBlack(img)) {
-          this.frame = img;
-          this.lastFrameAt = Date.now();
-          this.lastGoodAt = Date.now();
-          this.ready = true;
-          log('game: iframe capture after revive');
-          return { ok: true, via: 'iframe' };
+  async waitForCapture({ after = Date.now(), timeoutMs = 8000, pollMs = 100 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    do {
+      if (this.stopped) return { ok: false, error: 'stopped' };
+      if (this.lastFrameAt >= after && this.frameAgeMs >= 0 && this.frameAgeMs <= 2500
+        && !isFrameBlack(this.frame) && !this.blocked) return { ok: true, via: 'verified-frame' };
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      await delay(Math.min(pollMs, remaining));
+    } while (Date.now() <= deadline);
+    return { ok: false, error: 'no fresh healthy capture' };
+  }
+
+  reviveCapture({ timeoutMs = 8000 } = {}) {
+    if (this.reviveInFlight) return this.reviveInFlight;
+    this.reviveInFlight = (async () => {
+      if (this.stopped) return { ok: false, error: 'stopped' };
+      const page = this.page;
+      if (!page || page.isClosed?.()) return { ok: false, error: 'no page' };
+      const after = Date.now();
+      await this.#cycleScreencast(page);
+      try {
+        // Originals render in shadow DOM, not an iframe. A 1px about:blank
+        // frame is not a game: use a full page capture when no useful iframe exists.
+        const buf = await this.#screenshotIframe(page) || await page.screenshot({ type: 'jpeg', quality: 55 });
+        if (buf) {
+          const img = await loadImage(buf);
+          if (!isFrameBlack(img) && !this.blocked) {
+            this.frame = img;
+            this.lastFrameAt = Date.now();
+            this.lastGoodAt = this.lastFrameAt;
+            this.ready = true;
+          }
         }
-      }
-    } catch { /* keep cycle */ }
-    return { ok: true, via: 'cycle' };
+      } catch (err) { this.lastError = err.message; }
+      return this.waitForCapture({ after, timeoutMs });
+    })().finally(() => { this.reviveInFlight = null; });
+    return this.reviveInFlight;
   }
 
   async #screenshotIframe(page) {
@@ -1227,22 +1278,28 @@ export class GameFeed {
     const frames = page.frames();
     const main = typeof page.mainFrame === 'function' ? page.mainFrame() : null;
     const rects = [];
-    for (const f of frames) {
-      if (f === main) continue;
-      try {
-        const el = await f.frameElement();
-        if (!el) continue;
-        const box = await el.boundingBox();
-        if (!box) continue;
-        rects.push({ frame: f, width: box.width, height: box.height });
-      } catch { /* detached or cross-origin */ }
-    }
-    const best = pickLargestRect(rects);
-    if (!best?.frame) return null;
+    const handles = [];
     try {
-      return await best.frame.screenshot({ type: 'jpeg', quality: 55 });
-    } catch {
+      for (const f of frames) {
+        if (f === main) continue;
+        try {
+          const el = await f.frameElement();
+          if (!el) continue;
+          handles.push(el);
+          const box = await el.boundingBox();
+          if (!box || box.width < 160 || box.height < 120) continue;
+          rects.push({ element: el, width: box.width, height: box.height });
+        } catch { /* detached or cross-origin */ }
+      }
+      const best = pickLargestRect(rects);
+      if (!best?.element) return null;
+      // Puppeteer 24 Frame has no screenshot(); ElementHandle does.
+      return await best.element.screenshot({ type: 'jpeg', quality: 55 });
+    } catch (err) {
+      this.lastError = `iframe capture: ${err.message}`;
       return null;
+    } finally {
+      for (const el of handles) { try { await el.dispose?.(); } catch { /* detached */ } }
     }
   }
 
@@ -1427,6 +1484,7 @@ export class GameFeed {
       return { ok: true, relaunch: true };
     }
     try {
+      const intendedSlug = gameSlugFromUrl(this.page.url());
       this.ready = false;
       this.frame = null;
       this.loading = true;
@@ -1437,13 +1495,18 @@ export class GameFeed {
       const clear = await this.#waitClear(this.page, 60000);
       if (clear.ok) {
         this.lastError = null;
-        await this.#snapshotLobby();
-        const entered = await this.#tryEnterDemo(this.page);
-        await this.#startScreencast(this.page);
-        if (entered) {
-          await delay(1500);
-          await this.ensureBetZero();
+        // A table reload is not a request to pick a game from the lobby.
+        // Only reopen the intended card if the reload actually lost the table.
+        if (intendedSlug && !gameSlugFromUrl(this.page.url())) {
+          const label = GAME_CARD[intendedSlug];
+          if (label) await this.openGameByCard(label);
         }
+        if (intendedSlug && gameSlugFromUrl(this.page.url()) !== intendedSlug) {
+          this.currentUrl = this.page.url();
+          this.lastError = 'reload did not preserve source table';
+          return { ok: false, error: this.lastError, url: this.currentUrl };
+        }
+        await this.#startScreencast(this.page);
       } else {
         log('game: still blocked after reload');
       }
@@ -1515,12 +1578,19 @@ export class GameFeed {
           return !(st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0');
         };
         const q = want.toLowerCase().replace(/\s+/g, ' ').trim();
+        const isEnabled = (el) => {
+          for (let node = el; node; node = node.parentElement || node.getRootNode?.().host) {
+            if (node.disabled || node.hasAttribute?.('disabled') || node.matches?.(':disabled')
+              || String(node.getAttribute?.('aria-disabled')).toLowerCase() === 'true') return false;
+          }
+          return true;
+        };
         const PROMO = /meet the house|made by|originals\b.*more|mini player|play .+ in the|in the mini/i;
         const CTA = /\b(play|open|start|launch|watch|join)\b/i;
         const nodes = deepAll('a,button,[role="button"],[role="link"],input[type="button"],input[type="submit"]');
         const scored = [];
         for (const el of nodes) {
-          if (!isVisible(el)) continue;
+          if (!isVisible(el) || !isEnabled(el)) continue;
           const inner = (el.innerText || '').replace(/\s+/g, ' ').trim();
           const aria = (el.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
           const title = (el.getAttribute('title') || '').replace(/\s+/g, ' ').trim();
@@ -1538,7 +1608,7 @@ export class GameFeed {
             if (!q || !text) return false;
             if (text === q) return true;
             if (/\b(info|history|rules|fair|help|amount|halve|double|wallet)\b/.test(text)) return false;
-            if (/cash out/.test(text) && /\$?\s*0\.00/.test(text)) return false;
+
             if (!text.startsWith(q)) return false;
             const rest = text.slice(q.length).trim();
             if (!rest) return true;
@@ -1563,7 +1633,15 @@ export class GameFeed {
         if (!scored.length) return null;
         scored.sort((a, b) => b.score - a.score || a.text.length - b.text.length);
         const best = scored[0];
-        best.el.click();
+        if (!isEnabled(best.el)) return null;
+        // A disabled native control (or overridden no-op click) may silently return.
+        // Confirm delivery, not an invented game outcome; perception verifies that later.
+        let dispatched = false;
+        const onClick = () => { dispatched = true; };
+        best.el.addEventListener('click', onClick, { capture: true, once: true });
+        try { best.el.click(); }
+        finally { best.el.removeEventListener('click', onClick, true); }
+        if (!dispatched) return null;
         return { text: best.text, x: best.x, y: best.y };
       }, needle);
       if (!hit) {

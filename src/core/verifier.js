@@ -93,8 +93,18 @@ export class Verifier {
               const tail = path.split('/').pop().replace(/^housegames-/, '');
               if (fold(tail) !== fold(s.game)) return null;
             }
+            const outcome = s.report?.outcome;
+            const local = outcome?.source === 'local-round' ? outcome
+              : s.lastResult?.source === 'local-round' ? s.lastResult : null;
+            if (local) {
+              const id = local.eventId || local.roundId;
+              const baselineIds = [base.lastResult, base.report?.outcome]
+                .filter(v => v?.source === 'local-round').map(v => v.eventId || v.roundId);
+              if (local.local !== true || local.confirmed !== true || !str(id)
+                || !local.game || (s.game && fold(local.game) !== fold(s.game))) return null;
+              return baselineIds.includes(id) ? null : 'local-round';
+            }
             if (s.lastResult !== null && s.lastResult !== undefined && sig(s.lastResult) !== baseResult) return 'lastResult';
-            const outcome = s.report && s.report.outcome;
             if (outcome !== null && outcome !== undefined && sig(outcome) !== baseOutcome) return 'outcome';
             return null;
           };

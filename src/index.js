@@ -26,7 +26,8 @@ import { Controller } from './core/controller.js';
 import { Rotation, quietIntervalMs } from './core/rotation.js';
 import { inferPhase } from './core/play-labels.js';
 import { OpsLoop } from './ops-loop.js';
-import { nextIdleMs, isBigWin } from './core/variety.js';
+import { broadcastReadiness } from './broadcast-readiness.js';
+import { HostSpeech } from './host-speech.js';
 import { rankMessages } from './core/priority.js';
 import { classify, pickGreetLine } from './intent.js';
 import { closeBrowser } from './browser.js';
@@ -578,7 +579,6 @@ log(c.gamePerception
 // The host owns the perception clock. Without this the world model only ever sees its
 // initial snapshot, and every plan waits on a table nobody is watching.
 let perceptionBusy=false;
-let lastBigWin='';
 async function refreshWorld() {
   if(perceptionBusy || controllerStopped) return;
   perceptionBusy=true;
@@ -596,16 +596,7 @@ async function refreshWorld() {
     world.apply({game:adapter?.name||null,phase,controls,report,lastResult:report.outcome||null,
       balance:p.balance??null,multiplier:settings.multiplier??null,winChance:settings.winChance??null,
       stake:settings.stake??null,round:controller.status().completed,at:Date.now()});
-    const outcome = report.outcome;
-    if (isBigWin(outcome)) {
-      const key = `${outcome.source}|${outcome.result}|${adapter?.name || ''}`;
-      if (key !== lastBigWin) {
-        lastBigWin = key;
-        brain.say('win', { round: controller.status().completed, detail: `${adapter?.name || 'table'} won at ${outcome.result}x` })
-          .then((shaped) => { if (shaped?.text) speak(shaped.text, 'win'); })
-          .catch(() => {});
-      }
-    }
+    hostSpeech.observeOutcome(report.outcome).catch(() => {});
     state.round=controller.status().completed;
     bus.emit('world',world.get());
   } catch(err) { log(`perceive: refresh failed: ${err.message}`); }
@@ -620,7 +611,7 @@ agent = new AgentLoop({
   jev,
   perception,
   playQueue,
-  speak: (text, kind, meta) => speak(text, kind || 'agent', meta || {}),
+  speak: (text, kind, meta) => deliverSpeech(text, kind || 'agent', meta || {}),
   setGesture,
   getSegment: () => state.segment,
   // A greet/reply that arrives while a low-priority line is sounding asks the voice to
@@ -628,6 +619,13 @@ agent = new AgentLoop({
   onUrgent: () => {
     if (voice.speaking && voiceCtl.priority >= TALK_WIN) voiceCtl.urgent = true;
   },
+});
+
+// This clock also runs in talk-only mode and never gates on viewer presence.
+const hostSpeech = new HostSpeech({
+  brain,
+  enqueue: (text, kind, meta) => agent.enqueue(text, kind, meta),
+  context: () => ({ game: world.get()?.game || null, segment: state.segment, round: state.round }),
 });
 
 // VOD bookmarks: one line every 3 h so a long recording can be traced to game/segment/commit.
@@ -711,7 +709,12 @@ function startEncoder() {
   encoder.start();
 }
 
-async function speak(text, kind = 'idle', meta = {}) {
+// Every producer uses TalkQ. Only the agent's playback callback may touch TTS.
+function speak(text, kind = 'idle', meta = {}) {
+  return agent?.enqueue(text, kind, meta) ?? false;
+}
+
+async function deliverSpeech(text, kind = 'idle', meta = {}) {
   const hint = meta && typeof meta === 'object' ? meta : {};
   // Strip a host cue before sanitize so a truncated JSON tail cannot be spoken.
   const cue = takeHostCue(text);
@@ -928,6 +931,19 @@ async function main() {
   await renderer.warmArt();
   voice.start();
   await game.start();
+  // Never publish a category, challenge, or black game merely because Chrome launched.
+  if (!/^https:\/\/www\.housebets\.com\/games\/housegames-/i.test(game.page?.url?.() || '')) {
+    const entry = await game.openGameByCard('Dice');
+    if (!entry?.ok) throw new Error('Broadcast refused: could not enter a House Game');
+  }
+  await game.page?.bringToFront?.();
+  const readyDeadline = Date.now() + 20000;
+  while (!broadcastReadiness(game).ok && Date.now() < readyDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  const launchCheck = broadcastReadiness(game);
+  if (!launchCheck.ok) throw new Error(`Broadcast refused: ${launchCheck.reason}`);
+  log('hubie: broadcast gate passed (fresh playable table pixels)');
   startEncoder();
   chat.start();
   if (process.env.SIM_CHAT === '1') startSimChat();
@@ -945,20 +961,7 @@ async function main() {
     })),
   });
   ops.start();
-  const armVibes = () => {
-    const wait = nextIdleMs();
-    setTimeout(() => {
-      const table = world.get()?.game || 'House Originals';
-      brain.say('idle', { game: table, segment: 'play', force: true })
-        .then((shaped) => {
-          const line = shaped?.text || 'Still here. The table keeps moving.';
-          speak(line, 'idle');
-        })
-        .catch(() => speak('Still here. The table keeps moving.', 'idle'))
-        .finally(() => { if (!stopping) armVibes(); });
-    }, wait);
-  };
-  armVibes();
+  hostSpeech.start();
 
   const limit = c.recordOnly ? (c.recordSeconds || 25) : 0;
   if (limit) {
@@ -975,6 +978,7 @@ function shutdown(reason) {
   controllerStopped = true;
   controller.pause();
   log(`hubie: stopping - ${reason}`);
+  hostSpeech.stop();
   agent.stop();
   chat.stop();
   voice.stop();

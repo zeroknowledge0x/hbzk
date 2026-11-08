@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {createCanvas} from '@napi-rs/canvas';
+import {broadcastReadiness} from '../src/broadcast-readiness.js';
+function frame(){const c=createCanvas(640,360),x=c.getContext('2d');x.fillStyle='#102030';x.fillRect(0,0,640,360);for(let i=0;i<5;i++){x.fillStyle=i%2?'#709090':'#40ddaa';x.fillRect(160+i*50,100,40,160)}return c;}
+test('broadcast cannot start with bright chrome and missing game',()=>{const c=createCanvas(640,360),x=c.getContext('2d');x.fillStyle='#14212b';x.fillRect(0,0,640,360);x.fillStyle='white';x.fillRect(0,0,640,40);assert.equal(broadcastReadiness({frame:c,frameAgeMs:0,ready:true,getReport:()=>({url:'https://www.housebets.com/games/housegames-mines'})}).ok,false)});
+test('category page is not a playable House Game even with healthy pixels',()=>{assert.equal(broadcastReadiness({frame:frame(),frameAgeMs:0,ready:true,getReport:()=>({url:'https://www.housebets.com/games/blackjack'})}).ok,false)});
+test('fresh healthy House Game is allowed, stale and blocked are not',()=>{const g={frame:frame(),frameAgeMs:10,ready:true,getReport:()=>({url:'https://www.housebets.com/games/housegames-mines'})};assert.equal(broadcastReadiness(g).ok,true);g.frameAgeMs=10000;assert.equal(broadcastReadiness(g).ok,false);g.frameAgeMs=0;g.blocked=true;assert.equal(broadcastReadiness(g).ok,false)});

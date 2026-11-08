@@ -43,13 +43,13 @@ test('blackjack and hilo expose in-round labels, keno/mines pick spots', () => {
   }
 });
 
-test('in-round tower prefers Random pick over Cash out', () => {
+test('in-round selection preserves explicit Cash out over fallback Random pick', () => {
   const ordered = preferInRoundLabels(
     ['Bet', 'Cash out', 'Random pick'],
     { phase: 'playing', controls: ['Cash out', 'Random pick'] },
   );
-  assert.equal(ordered[0], 'Random pick');
-  assert.ok(ordered.indexOf('Random pick') < ordered.indexOf('Cash out'));
+  assert.equal(ordered[0], 'Cash out');
+  assert.ok(ordered.indexOf('Cash out') < ordered.indexOf('Random pick'));
 });
 
 test('Bet does not match Bet Info', () => {
@@ -90,7 +90,7 @@ test('blackjack start_round clicks Hit when Bet is missing; no result is still o
     tools,
     planner,
     verifier: { async waitFor() { return { ok: false, error: 'timeout' }; } },
-    game: { getReport: () => ({ url: 'https://www.housebets.com/games/housegames-blackjack' }) },
+    game: { setStake: async () => ({ok:true,verified:true,observed:0}), getReport: () => ({ url: 'https://www.housebets.com/games/housegames-blackjack' }) },
     playable: DEFAULT_PLAYABLE,
   });
   planner.setGoal({ kind: 'play', game: 'Blackjack', rounds: 1 });
@@ -120,7 +120,7 @@ test('enter_game while mid-round stays on the table instead of change_game', asy
     tools,
     planner,
     verifier: { async waitFor() { return { ok: false, error: 'timeout' }; } },
-    game: { getReport: () => ({ url: 'https://www.housebets.com/games/housegames-dragon-tower' }) },
+    game: { setStake: async () => ({ok:true,verified:true,observed:0}), getReport: () => ({ url: 'https://www.housebets.com/games/housegames-dragon-tower' }) },
     playable: DEFAULT_PLAYABLE,
     speak: (t) => said.push(t),
   });
@@ -142,7 +142,7 @@ test('a failed plan is logged, never spoken as plan failed', async () => {
     tools: { async run() { return { ok: false, error: 'cannot change game mid-round' }; } },
     planner,
     verifier: { async waitFor() { return { ok: false }; } },
-    game: { getReport: () => ({ url: 'https://www.housebets.com/games/housegames-dice' }) },
+    game: { setStake: async () => ({ok:true,verified:true,observed:0}), getReport: () => ({ url: 'https://www.housebets.com/games/housegames-dice' }) },
     playable: DEFAULT_PLAYABLE,
     speak: (t) => said.push(t),
   });
@@ -179,6 +179,7 @@ test('a successful play click snapshots the table frame', async () => {
     planner,
     verifier: { async waitFor() { return { ok: false, error: 'timeout' }; } },
     game: {
+      setStake: async () => ({ok:true,verified:true,observed:0}),
       getReport: () => ({ url: 'https://www.housebets.com/games/housegames-keno' }),
       async snapPlay(tag) { shots.push(tag); return { ok: true, tag }; },
     },
@@ -206,7 +207,7 @@ test('seeFrame miss stays quiet instead of a canned click line', async () => {
     },
     planner,
     verifier: { async waitFor() { return { ok: false }; } },
-    game: { getReport: () => ({ url: 'https://www.housebets.com/games/housegames-dice' }), async snapPlay() { return { ok: true }; } },
+    game: { setStake: async () => ({ok:true,verified:true,observed:0}), getReport: () => ({ url: 'https://www.housebets.com/games/housegames-dice' }), async snapPlay() { return { ok: true }; } },
     playable: DEFAULT_PLAYABLE,
     speak: (t) => said.push(t),
     seeFrame: async () => null,
@@ -234,7 +235,7 @@ test('seeFrame line is spoken when the model returns one', async () => {
     },
     planner,
     verifier: { async waitFor() { return { ok: false }; } },
-    game: { getReport: () => ({ url: 'https://www.housebets.com/games/housegames-dice' }), async snapPlay() { return { ok: true }; } },
+    game: { setStake: async () => ({ok:true,verified:true,observed:0}), getReport: () => ({ url: 'https://www.housebets.com/games/housegames-dice' }), async snapPlay() { return { ok: true }; } },
     playable: DEFAULT_PLAYABLE,
     speak: (t) => said.push(t),
     seeFrame: async () => 'Dice table, zero locked, slider in the middle.',
@@ -266,7 +267,7 @@ test('blackjack in-round prefers Hit over Bet', async () => {
     },
     planner,
     verifier: { async waitFor() { return { ok: false, error: 'timeout' }; } },
-    game: { getReport: () => ({ url: 'https://www.housebets.com/games/housegames-blackjack' }) },
+    game: { setStake: async () => ({ok:true,verified:true,observed:0}), getReport: () => ({ url: 'https://www.housebets.com/games/housegames-blackjack' }) },
     playable: DEFAULT_PLAYABLE,
   });
   planner.setGoal({ kind: 'play', game: 'Blackjack', rounds: 1 });

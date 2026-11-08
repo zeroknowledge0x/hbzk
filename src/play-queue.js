@@ -1,5 +1,6 @@
 // Play queue: viewer game requests, FIFO, plus the tiny parser that recognises them.
 import { byName } from './core/adapters/index.js';
+import { parseIntent } from './core/intents.js';
 
 export const GAMES = ['Dice', 'Mines', 'Limbo', 'Plinko', 'Blackjack', 'Keno', 'Wheel', 'Hilo', 'Dragon Tower', 'Tower', 'Max Win', "Hubie's Road"];
 
@@ -47,6 +48,9 @@ export function normalizeGame(word) {
 export function parseGameRequest(text) {
   const line = String(text || '').replace(/\s+/g, ' ').trim();
   if (!line || line.length > 200) return null;
+  const canonical = parseIntent(line);
+  if (canonical?.kind === 'change_game') return normalizeGame(canonical.args.game);
+  if (canonical && /^set_/.test(canonical.kind)) return null;
   // "change payout" / "win chance" / "po" tune the current game, not a switch.
   if (TUNE_WORD.test(line)) return null;
   const match = line.match(GAME_WORD);
