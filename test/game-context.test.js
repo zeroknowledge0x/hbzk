@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {GameFeed} from '../src/game.js';
+test('game feed settings methods expose verified browser API',()=>{const g=new GameFeed({});for(const k of ['readSettings','setMultiplier','setWinChance','setStake'])assert.equal(typeof g[k],'function');});
+test('game UI context passes handle explicitly instead of reading Node process in browser',async()=>{const g=new GameFeed({});let args;g.page={isClosed:()=>false,async evaluate(fn,...a){args=a;assert.doesNotMatch(fn.toString(),/process\.env/);return {bodySnippet:'',title:'Dice',clickables:[],outcome:null};}};await g.getUiSnapshot({force:true});assert.ok(args.length>=2);});

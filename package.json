@@ -1,0 +1,29 @@
+{
+  "name": "hbzk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hubie: 24/7 AI streamer for Housebets Contest Labs",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "src/index.js",
+  "scripts": {
+    "bootstrap": "node scripts/bootstrap.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "setup": "node scripts/setup.mjs",
+    "start": "node src/index.js",
+    "record": "node src/index.js --record",
+    "dev": "node src/index.js --record",
+    "art": "node scripts/fetch-art.mjs",
+    "layers": "node scripts/make-layers.mjs",
+    "test": "node --test \"test/**/*.js\"",
+    "host": "node src/index.js"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^1.1.0",
+    "msedge-tts": "^2.1.1",
+    "puppeteer-core": "^24.37.5"
+  },
+  "license": "UNLICENSED"
+}
