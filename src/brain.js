@@ -27,6 +27,19 @@ Rules, non-negotiable:
 
 const SAFE_FALLBACK = 'Demo play only, chat. Keep it light — no real money on this stream.';
 
+export const OWNER_SYSTEM = `You are the stream owner sitting next to Hubie's Kick box.
+Return ONLY one JSON object, no markdown, no prose:
+{"do":"noop"|"rearm_capture"|"play_now"|"speak"|"cycle_table"|"click","click":string|null,"say":string|null,"why":string}
+Rules:
+- Demo stake stays 0 in code. Never wallet, deposit, Over, Under, or a table URL.
+- click must be a short play label from State.controls (Bet, GO, Hit, Stand, Higher, Lower, Random pick, Auto pick, Skip, Same, Cash out, Deal, Roll, Play, Start). If State.active is true, do not click — the controller owns hands.
+- State.black true -> rearm_capture.
+- No play click for a long time and not active -> play_now.
+- Unanswered Kick chat -> speak one short English line using their name. Max 12 words. No deposits, no real money.
+- A screenshot if present is eyes only. Never pick a click from pixels. Hands use State.controls.
+- Prefer noop when already playing.
+- Never invent numbers, games, or results. why max 12 words.`;
+
 // The live operator: one strict JSON object per 1 s tick, no prose, no invented state.
 const AGENT_SYSTEM = `You are Hubie's stream operator. Read the live report and return ONLY one JSON object, no markdown, no prose:
 {"action":"wait"|"reload"|"click"|"navigate"|"speak"|"silence","target":string|null,"say":string|null,"reason":string}
@@ -167,8 +180,38 @@ export class Brain {
     return text;
   }
 
+  async #ownerDecide({ report, history = [], jpeg = null } = {}) {
+    if (this.offline) throw new Error('owner: brain offline');
+    const textPart = `OWNER State=${JSON.stringify(report || {})}`;
+    let userContent = textPart;
+    if (jpeg) {
+      let buf = null;
+      try { buf = Buffer.isBuffer(jpeg) ? jpeg : Buffer.from(jpeg); } catch { buf = null; }
+      if (buf?.length && buf.length <= 80000) {
+        userContent = [
+          { type: 'text', text: textPart },
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${buf.toString('base64')}` } },
+        ];
+      }
+    }
+    const turns = [];
+    for (const t of (history || []).slice(-6)) {
+      const role = t?.role === 'assistant' ? 'assistant' : 'user';
+      const content = typeof t?.content === 'string' ? t.content : JSON.stringify(t?.content || '');
+      if (!content) continue;
+      turns.push({ role, content: content.slice(0, 800) });
+    }
+    const text = await this.#chat(
+      [{ role: 'system', content: OWNER_SYSTEM }, ...turns, { role: 'user', content: userContent }],
+      { maxTokens: 120, temperature: 0, timeoutMs: 8000 },
+    );
+    if (!text) throw new Error('owner: empty reply');
+    return text;
+  }
+
   async say(kind, payload = {}, opts = {}) {
     if (kind === 'agent') return this.#agentDecide(payload.observation);
+    if (kind === 'owner') return this.#ownerDecide(payload);
     const prompt = this.#userPrompt(kind, payload);
     const context = this.#context(kind, payload);
     const system = context ? `${SYSTEM}\n\n${context}` : SYSTEM;

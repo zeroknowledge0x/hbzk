@@ -85,3 +85,26 @@ test('ops apply click only hits a visible play label', async () => {
   await ops.apply({ do: 'click', click: 'Over' });
   assert.deepEqual(clicks, ['Hit']);
 });
+
+test('ops report includes Kick chat lines', () => {
+  const ops = new OpsLoop({
+    log() {},
+    world: { get: () => ({ game: 'Hilo', controls: ['Higher'] }) },
+    chat: () => [{ name: 'sam', text: 'hit' }],
+  });
+  const r = ops.report();
+  assert.equal(r.chat[0].name, 'sam');
+  assert.equal(r.game, 'Hilo');
+});
+
+test('ops click is skipped while the controller owns hands', async () => {
+  const clicks = [];
+  const ops = new OpsLoop({
+    game: { clickText: async (t) => { clicks.push(t); return { ok: true, text: t }; } },
+    controller: { status: () => ({ active: true }) },
+    log() {},
+    world: { get: () => ({ controls: ['Hit'] }) },
+  });
+  await ops.apply({ do: 'click', click: 'Hit' });
+  assert.deepEqual(clicks, []);
+});

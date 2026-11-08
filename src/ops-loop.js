@@ -6,7 +6,7 @@ import { isFrameBlack, parseOps, OWNER_MS, CAPTURE_MS } from './capture-health.j
 import { matchPlayClick } from './core/play-labels.js';
 
 export class OpsLoop {
-  constructor({ game, brain, rotation, controller, speak, log, world, now } = {}) {
+  constructor({ game, brain, rotation, controller, speak, log, world, now, chat } = {}) {
     this.game = game;
     this.brain = brain;
     this.rotation = rotation;
@@ -15,6 +15,7 @@ export class OpsLoop {
     this.log = log || (() => {});
     this.world = world;
     this.now = now || (() => Date.now());
+    this.chat = typeof chat === 'function' ? chat : () => [];
     this.turns = [];
     this.blackStreak = 0;
     this.timer = null;
@@ -64,6 +65,8 @@ export class OpsLoop {
       lastError: this.game?.lastError || null,
       lastClick: this.game?.lastPointer?.text || null,
       lastClickAgeMs: this.game?.lastPointer?.at ? this.now() - this.game.lastPointer.at : null,
+      chat: (this.chat() || []).slice(0, 6),
+      active: !!(this.controller && typeof this.controller.status === 'function' && this.controller.status()?.active),
     };
   }
 
@@ -81,9 +84,11 @@ export class OpsLoop {
         this.turns = [{ role: 'user', content: `SUMMARY: ${summary}` }, ...this.turns.slice(-4)];
         this.log('ops: context compacted');
       }
-      const text = await this.brain.say('agent', {
-        observation: { owner: true, ...report, history: this.turns.slice(-6) },
-      });
+      let jpeg = null;
+      if (report.black || report.lastClickAgeMs == null || report.lastClickAgeMs > 8000) {
+        try { jpeg = await this.game?.captureLowRes?.(); } catch { jpeg = null; }
+      }
+      const text = await this.brain.say('owner', { report, history: this.turns.slice(-6), jpeg });
       const op = parseOps(text);
       this.turns.push({ role: 'assistant', content: JSON.stringify(op) });
       this.#write(op, report);
@@ -109,6 +114,10 @@ export class OpsLoop {
     }
     if (d === 'speak' && op.say) this.speak(op.say);
     if (d === 'click') {
+      if (this.controller && typeof this.controller.status === 'function' && this.controller.status()?.active) {
+        this.log('ops: click skipped (controller owns hands)');
+        return;
+      }
       const w = this.world && typeof this.world.get === 'function' ? this.world.get() : {};
       const label = matchPlayClick(op.click, w.controls);
       if (!label || typeof this.game?.clickText !== 'function') return;

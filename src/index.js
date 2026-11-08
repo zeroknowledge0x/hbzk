@@ -929,7 +929,12 @@ async function main() {
   setInterval(refreshWorld,1000).unref?.();
   agent.start({ talkOnly: true });
   controllerBeat();
-  const ops = new OpsLoop({ game, brain, rotation, controller, speak, log, world });
+  const ops = new OpsLoop({
+    game, brain, rotation, controller, speak, log, world,
+    chat: () => (state.chat || []).slice(-6).map((m) => ({
+      name: m.name, text: String(m.text || '').slice(0, 80),
+    })),
+  });
   ops.start();
 
   const limit = c.recordOnly ? (c.recordSeconds || 25) : 0;
