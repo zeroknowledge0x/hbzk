@@ -67,3 +67,16 @@ export function shotLine(tag) {
   const key = Object.keys(SHOT_LINE).find((k) => t === k || t.startsWith(`${k} `) || t.startsWith(k));
   return key ? SHOT_LINE[key] : null;
 }
+
+export function matchPlayClick(want, controls) {
+  const q = String(want || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!q) return null;
+  const allowed = PLAY_CLICK_LABELS.find((label) => {
+    const s = label.toLowerCase();
+    return q === s || q.startsWith(`${s} `) || s.startsWith(q);
+  });
+  if (!allowed) return null;
+  const list = Array.isArray(controls) ? controls : [];
+  const visible = list.some((c) => String(c).toLowerCase().includes(allowed.toLowerCase()));
+  return visible ? allowed : null;
+}

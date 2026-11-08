@@ -2,7 +2,8 @@
 // Not Hermes. One timer in-process. Capture death is handled first, without an LLM.
 import fs from 'node:fs';
 import path from 'node:path';
-import { isFrameBlack, parseOps } from './capture-health.js';
+import { isFrameBlack, parseOps, OWNER_MS, CAPTURE_MS } from './capture-health.js';
+import { matchPlayClick } from './core/play-labels.js';
 
 export class OpsLoop {
   constructor({ game, brain, rotation, controller, speak, log, world, now } = {}) {
@@ -23,11 +24,11 @@ export class OpsLoop {
 
   start() {
     if (this.timer) return;
-    this.timer = setInterval(() => { this.watchCapture().catch(() => {}); }, 2000);
+    this.timer = setInterval(() => { this.watchCapture().catch(() => {}); }, CAPTURE_MS);
     this.timer.unref?.();
-    this.llmTimer = setInterval(() => { this.askOwner().catch(() => {}); }, 90000);
+    this.llmTimer = setInterval(() => { this.askOwner().catch(() => {}); }, OWNER_MS);
     this.llmTimer.unref?.();
-    this.log('ops: owner loop on (capture 2s, prompt 90s)');
+    this.log('ops: owner loop on (capture 2s, prompt 5s)');
   }
 
   stop() {
@@ -57,6 +58,7 @@ export class OpsLoop {
     return {
       game: w.game || null,
       phase: w.phase || null,
+      controls: Array.isArray(w.controls) ? w.controls.slice(0, 24) : [],
       black: isFrameBlack(this.game?.frame),
       frameAgeMs: this.game?.frameAgeMs ?? -1,
       lastError: this.game?.lastError || null,
@@ -71,8 +73,8 @@ export class OpsLoop {
     this.busy = true;
     try {
       const report = this.report();
-      if (!report.black && report.lastClickAgeMs != null && report.lastClickAgeMs < 45000) return;
-      const user = `OWNER: Keep Hubie live. State=${JSON.stringify(report)}. JSON only.`;
+      if (!report.black && report.lastClickAgeMs != null && report.lastClickAgeMs < 4000) return;
+      const user = `OWNER: Keep Hubie live. State=${JSON.stringify(report)}. Click only a visible play label. JSON only.`;
       this.turns.push({ role: 'user', content: user });
       if (this.turns.length > 16) {
         const summary = this.turns.slice(0, -4).map((t) => t.content).join(' | ').slice(0, 500);
@@ -106,6 +108,12 @@ export class OpsLoop {
       return;
     }
     if (d === 'speak' && op.say) this.speak(op.say);
+    if (d === 'click') {
+      const w = this.world && typeof this.world.get === 'function' ? this.world.get() : {};
+      const label = matchPlayClick(op.click, w.controls);
+      if (!label || typeof this.game?.clickText !== 'function') return;
+      await this.game.clickText(label);
+    }
   }
 
   #write(op, report) {

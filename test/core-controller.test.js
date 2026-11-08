@@ -368,6 +368,22 @@ describe('Controller', () => {
       await ctrl.tick();
       assert.equal(tools.calls.length, 0);
     });
+
+    it('keeps playing the current table when rotation is not due', async () => {
+      const rotation = {
+        due() { return false; },
+        random() { throw new Error('must not rotate'); },
+        next() { throw new Error('must not rotate'); },
+        playNow() {},
+        arm() {},
+      };
+      const { ctrl, tools, planner } = buildController({ rotation });
+      ctrl._active = false;
+      await ctrl.tick();
+      assert.equal(planner.status().goal?.game, 'Dice');
+      assert.equal(ctrl._active, true);
+      assert.equal(tools.calls[0]?.tool, 'change_game');
+    });
   });
 
   describe('concurrency', () => {

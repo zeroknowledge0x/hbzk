@@ -247,10 +247,16 @@ export class Controller {
   async _tick() {
     if (this._paused) return;
     if (!this._active) {
-      if (!this.rotation?.due?.()) return;
-      const name = typeof this.rotation.random === 'function' ? this.rotation.random() : this.rotation.next();
+      if (typeof this.rotation?.due !== 'function') return;
+      const rotate = this.rotation.due();
+      let name = null;
+      if (rotate) {
+        name = typeof this.rotation.random === 'function' ? this.rotation.random() : this.rotation.next();
+      } else {
+        name = String(this.world?.get?.()?.game || this.planner.status()?.goal?.game || '').trim();
+      }
       if (!name || !this.playable.has(name.toLowerCase())) return;
-      this.planner.setGoal({kind: 'play', game: name, rounds: 3});
+      this.planner.setGoal({kind: 'play', game: name, rounds: rotate ? 3 : 1});
       this._active = true;
     }
 

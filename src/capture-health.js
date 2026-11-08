@@ -23,7 +23,24 @@ export function isFrameBlack(img, { threshold = 16, sample = 32 } = {}) {
   }
 }
 
-export const ALLOWED_OPS = ['noop', 'rearm_capture', 'play_now', 'speak', 'cycle_table'];
+export const ALLOWED_OPS = ['noop', 'rearm_capture', 'play_now', 'speak', 'cycle_table', 'click'];
+export const OWNER_MS = 5000;
+export const CAPTURE_MS = 2000;
+
+export function shouldPumpCapture({ ageMs, black, quietMs = 700 } = {}) {
+  if (black) return true;
+  return Number(ageMs) >= quietMs;
+}
+
+export function pickLargestRect(rects) {
+  const list = Array.isArray(rects) ? rects.filter((r) => r && Number(r.width) > 0 && Number(r.height) > 0) : [];
+  if (!list.length) return null;
+  return list.reduce((best, r) => {
+    const area = Number(r.width) * Number(r.height);
+    const prev = Number(best.width) * Number(best.height);
+    return area > prev ? r : best;
+  });
+}
 
 export function parseOps(text) {
   const raw = String(text || '');
@@ -33,13 +50,14 @@ export function parseOps(text) {
     const o = JSON.parse(m[0]);
     const action = String(o.do || o.action || 'noop').toLowerCase();
     const mapped = action === 'reload' || action === 'rearm' ? 'rearm_capture'
-      : action === 'click' || action === 'navigate' ? 'play_now'
+      : action === 'navigate' ? 'play_now'
         : action === 'silence' || action === 'wait' ? 'noop'
           : action;
     const allowed = ALLOWED_OPS.includes(mapped) ? mapped : 'noop';
     const say = o.say ? String(o.say).slice(0, 140) : null;
     const why = String(o.why || o.reason || '').slice(0, 80);
-    return { do: allowed, say, why };
+    const click = String(o.click || o.label || '').slice(0, 40);
+    return { do: allowed, say, why, click: click || null };
   } catch {
     return { do: 'noop', say: null, why: 'bad-json' };
   }

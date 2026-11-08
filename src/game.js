@@ -8,6 +8,7 @@ import { getBrowser } from './browser.js';
 import { DesktopGrab } from './desktop-grab.js';
 import { readSettings, setSetting, zeroStake } from './game-settings.js';
 import { log } from './log.js';
+import { isFrameBlack, shouldPumpCapture, pickLargestRect } from './capture-health.js';
 
 const WAIT_MS = 1500;
 const UI_TTL_MS = 1000;
@@ -1204,7 +1205,45 @@ export class GameFeed {
       return { ok: true, via: 'recover' };
     }
     await this.#cycleScreencast(page);
+    try {
+      const buf = await this.#screenshotIframe(page);
+      if (buf) {
+        const img = await loadImage(buf);
+        if (!isFrameBlack(img)) {
+          this.frame = img;
+          this.lastFrameAt = Date.now();
+          this.lastGoodAt = Date.now();
+          this.ready = true;
+          log('game: iframe capture after revive');
+          return { ok: true, via: 'iframe' };
+        }
+      }
+    } catch { /* keep cycle */ }
     return { ok: true, via: 'cycle' };
+  }
+
+  async #screenshotIframe(page) {
+    if (!page || typeof page.frames !== 'function') return null;
+    const frames = page.frames();
+    const main = typeof page.mainFrame === 'function' ? page.mainFrame() : null;
+    const rects = [];
+    for (const f of frames) {
+      if (f === main) continue;
+      try {
+        const el = await f.frameElement();
+        if (!el) continue;
+        const box = await el.boundingBox();
+        if (!box) continue;
+        rects.push({ frame: f, width: box.width, height: box.height });
+      } catch { /* detached or cross-origin */ }
+    }
+    const best = pickLargestRect(rects);
+    if (!best?.frame) return null;
+    try {
+      return await best.frame.screenshot({ type: 'jpeg', quality: 55 });
+    } catch {
+      return null;
+    }
   }
 
   async #onScreencastFrame(page, f) {
@@ -1283,11 +1322,35 @@ export class GameFeed {
     if (!page || page.isClosed?.()) return;
     const now = Date.now();
     const age = now - this.lastFrameAt;
-    // A live screencast is cheaper and smoother: stay out of its way.
-    if (age < 700) return;
+    const black = isFrameBlack(this.frame);
+    // A live screencast of a black table still has age 0. Pump anyway and try the iframe.
+    if (!shouldPumpCapture({ ageMs: age, black })) return;
     if (this.watchInFlight) return;
     this.watchInFlight = true;
     try {
+      if (black) {
+        if (!this.iframeAttemptAt || now - this.iframeAttemptAt > 1000) {
+          this.iframeAttemptAt = now;
+          const iframeBuf = await this.#screenshotIframe(page);
+          if (iframeBuf) {
+            const img = await loadImage(iframeBuf);
+            if (!isFrameBlack(img)) {
+              this.frame = img;
+              this.lastGoodAt = Date.now();
+              this.ready = true;
+              this.loading = false;
+              this.lastError = null;
+              this.lastFrameAt = Date.now();
+              if (!this.iframeLoggedAt || now - this.iframeLoggedAt > 60000) {
+                this.iframeLoggedAt = now;
+                log('game: iframe capture (main frame was black)');
+              }
+              return;
+            }
+          }
+        }
+        if (age < 700) return;
+      }
       // Reuse the persistent CDP session: measured 44 ms vs 81 ms for page.screenshot,
       // which opens a temporary session every call.
       let buf;
