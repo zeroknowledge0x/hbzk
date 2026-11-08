@@ -26,6 +26,7 @@ import { Controller } from './core/controller.js';
 import { Rotation, quietIntervalMs } from './core/rotation.js';
 import { inferPhase } from './core/play-labels.js';
 import { OpsLoop } from './ops-loop.js';
+import { nextIdleMs, isBigWin } from './core/variety.js';
 import { rankMessages } from './core/priority.js';
 import { classify, pickGreetLine } from './intent.js';
 import { closeBrowser } from './browser.js';
@@ -362,7 +363,7 @@ function handleChat(m) {
   // back to one chat message even when TTS is seconds behind.
   if (!m.id) m.id = `c${(++chatSeq).toString(36)}`;
   lastChatAt = Date.now();
-  log(`chat: recv id=${m.id} name=${m.name} t=${lastChatAt}`);
+  log(`chat: recv id=${m.id} name=${m.name} text=${String(m.text).replace(/\s+/g, ' ').slice(0, 80)}`);
   const screened = intake.screen(m);
   if (screened.action === 'skip') {
     log(formatChatSkip(screened));
@@ -577,6 +578,7 @@ log(c.gamePerception
 // The host owns the perception clock. Without this the world model only ever sees its
 // initial snapshot, and every plan waits on a table nobody is watching.
 let perceptionBusy=false;
+let lastBigWin='';
 async function refreshWorld() {
   if(perceptionBusy || controllerStopped) return;
   perceptionBusy=true;
@@ -594,6 +596,16 @@ async function refreshWorld() {
     world.apply({game:adapter?.name||null,phase,controls,report,lastResult:report.outcome||null,
       balance:p.balance??null,multiplier:settings.multiplier??null,winChance:settings.winChance??null,
       stake:settings.stake??null,round:controller.status().completed,at:Date.now()});
+    const outcome = report.outcome;
+    if (isBigWin(outcome)) {
+      const key = `${outcome.source}|${outcome.result}|${adapter?.name || ''}`;
+      if (key !== lastBigWin) {
+        lastBigWin = key;
+        brain.say('win', { round: controller.status().completed, detail: `${adapter?.name || 'table'} won at ${outcome.result}x` })
+          .then((shaped) => { if (shaped?.text) speak(shaped.text, 'win'); })
+          .catch(() => {});
+      }
+    }
     state.round=controller.status().completed;
     bus.emit('world',world.get());
   } catch(err) { log(`perceive: refresh failed: ${err.message}`); }
@@ -933,6 +945,20 @@ async function main() {
     })),
   });
   ops.start();
+  const armVibes = () => {
+    const wait = nextIdleMs();
+    setTimeout(() => {
+      const table = world.get()?.game || 'House Originals';
+      brain.say('idle', { game: table, segment: 'play', force: true })
+        .then((shaped) => {
+          const line = shaped?.text || 'Still here. The table keeps moving.';
+          speak(line, 'idle');
+        })
+        .catch(() => speak('Still here. The table keeps moving.', 'idle'))
+        .finally(() => { if (!stopping) armVibes(); });
+    }, wait);
+  };
+  armVibes();
 
   const limit = c.recordOnly ? (c.recordSeconds || 25) : 0;
   if (limit) {

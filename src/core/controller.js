@@ -6,6 +6,7 @@
 import { byName } from './adapters/index.js';
 import { checkAction } from './safety.js';
 import { preferInRoundLabels, labelMatchesPlay } from './play-labels.js';
+import { varietyClicks, varietyPlay } from './variety.js';
 
 export class Controller {
   constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue }) {
@@ -379,7 +380,10 @@ export class Controller {
       }
     }
     if (adapter?.pick === 'number' && typeof this.game?.clickText === 'function') {
-      for (const n of [3, 11, 18, 24, 31]) {
+      const spots = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 2 + Math.floor(Math.random() * 3));
+      for (const n of spots) {
         const spot = await this.game.clickText(String(n)).catch(() => null);
         if (spot?.ok) {
           await this._snapPlay(String(n));
@@ -389,11 +393,26 @@ export class Controller {
     }
     const worldState = this.world?.get?.() || {};
     const controls = Array.isArray(worldState.controls) ? worldState.controls : [];
+    const phase = worldState.phase;
+    if (!this.variety || this.variety.game !== gameName || (phase === 'idle' && this.variety.done)) {
+      this.variety = { game: gameName, chips: varietyClicks(gameName, controls), at: 0, done: false };
+    }
+    if (phase === 'idle' && this.variety.at < this.variety.chips.length && typeof this.game?.clickText === 'function') {
+      const chip = this.variety.chips[this.variety.at++];
+      const hit = await this.game.clickText(chip).catch(() => null);
+      if (hit?.ok) {
+        this.log(`controller: variety "${chip}"`);
+        await this._snapPlay(chip);
+        return { ok: true, detail: hit };
+      }
+    }
+    if (phase === 'idle') this.variety.done = true;
+    const varied = varietyPlay(gameName, controls);
     let labels = preferInRoundLabels(
-      [...(adapter?.startLabels || []), step.args?.label]
+      [varied, ...(adapter?.startLabels || []), step.args?.label]
         .filter(Boolean)
         .filter((v, i, a) => a.findIndex((x) => String(x).toLowerCase() === String(v).toLowerCase()) === i),
-      { phase: worldState.phase, controls },
+      { phase, controls },
     );
     if (controls.length) {
       const present = labels.filter((label) =>

@@ -1,5 +1,8 @@
 // Tiny knowledge base: keyword-scored facts the brain may use. No embeddings, no network.
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 const STOP = new Set('the a an and or but if then than that this these those is are was were be been being to of in on for with at by from as it its you your i me my we they he she them do does did what who how why when where can could should would will just about like'.split(' '));
 
@@ -23,10 +26,27 @@ export class Knowledge {
         text: e.text || '',
         tags: (e.tags || []).map((t) => t.toLowerCase()),
       }));
-    } catch { /* no kb → brain just answers from its rules */ }
+    } catch { /* json is the fallback */ }
+    this.#loadSqlite(file);
   }
 
   get size() { return this.entries.length; }
+
+  #loadSqlite(jsonFile) {
+    const file = String(jsonFile || '').replace(/\.json$/i, '.sqlite');
+    try {
+      const { DatabaseSync } = require('node:sqlite');
+      const db = new DatabaseSync(file, { readOnly: true });
+      const rows = db.prepare('SELECT id, title, tags, text FROM facts').all();
+      if (!rows.length) return;
+      this.entries = rows.map((row) => ({
+        id: row.id,
+        title: row.title || '',
+        text: row.text || '',
+        tags: String(row.tags || '').toLowerCase().split(/\s+/).filter(Boolean),
+      }));
+    } catch { /* json entries stay */ }
+  }
 
   search(query, k = 2) {
     const q = terms(query);

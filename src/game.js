@@ -1529,7 +1529,7 @@ export class GameFeed {
           const parts = [inner, aria, title].filter(Boolean);
           const label = parts.sort((a, b) => a.length - b.length)[0] || '';
           if (!label) continue;
-          if (label.length > 28 || PROMO.test(label)) continue;
+          if (label.length > 80 || PROMO.test(label)) continue;
           if (CTA.test(label) && label.toLowerCase() !== q) continue;
           const low = label.toLowerCase();
           const matches = (want, seen) => {
@@ -1537,10 +1537,13 @@ export class GameFeed {
             const text = String(seen || '').toLowerCase().replace(/\s+/g, ' ').trim();
             if (!q || !text) return false;
             if (text === q) return true;
-            if (/\b(info|history|rules|fair|help|max|half|min)\b/.test(text)) return false;
-            const rest = text.replace(new RegExp('^' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b[\\s/]*'), '');
-            if (rest === text) return false;
-            return /^(same|card)$/.test(rest.replace(/[/\s]+/g, ''));
+            if (/\b(info|history|rules|fair|help|amount|halve|double|wallet)\b/.test(text)) return false;
+            if (/cash out/.test(text) && /\$?\s*0\.00/.test(text)) return false;
+            if (!text.startsWith(q)) return false;
+            const rest = text.slice(q.length).trim();
+            if (!rest) return true;
+            if (/^(same|card|number|tile|lane|floor)\b/.test(rest)) return true;
+            return /^(random pick|auto pick|skip|cash out|higher|lower)$/.test(q);
           };
           if (!matches(want, label)) continue;
           let score = low === q ? 100 : 80;

@@ -84,10 +84,13 @@ export function labelMatchesPlay(want, label) {
   const low = String(label || '').toLowerCase().replace(/\s+/g, ' ').trim();
   if (!q || !low) return false;
   if (low === q) return true;
-  if (/\b(info|history|rules|fair|help|max|half|min)\b/.test(low)) return false;
-  const rest = low.replace(new RegExp('^' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b[\\s/]*'), '');
-  if (rest === low) return false;
-  return /^(same|card)$/.test(rest.replace(/[/\s]+/g, ''));
+  if (/\b(info|history|rules|fair|help|amount|halve|double|wallet)\b/.test(low)) return false;
+  if (/cash out/.test(low) && /\$?\s*0\.00/.test(low)) return false;
+  if (!low.startsWith(q)) return false;
+  const rest = low.slice(q.length).trim();
+  if (!rest) return true;
+  if (/^(same|card|number|tile|lane|floor)\b/.test(rest)) return true;
+  return /^(random pick|auto pick|skip|cash out|higher|lower)$/.test(q);
 }
 
 export function matchPlayClick(want, controls) {

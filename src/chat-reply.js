@@ -101,6 +101,18 @@ export function safeTuneValue(kind, requested) {
   return { ok: true, value: String(Number(n.toFixed(2))), reason: null, lo: band.lo, hi: band.hi };
 }
 
+export function factReply(text, name = 'chat') {
+  const t = clean(text).toLowerCase();
+  const who = clean(name).slice(0, 16) || 'chat';
+  if (/\b(website|site|url|link)\b/.test(t) || /housebets\.com/.test(t)) {
+    return `Housebets is housebets.com, ${who}. Casino and sportsbook. This stream plays House Originals at stake zero.`;
+  }
+  if (/\b(how are you|how r u|how're you|apa kabar|kabar|what's up|whats up|how you doing)\b/.test(t)) {
+    return `I'm good, ${who}. Stake stays at zero and the table keeps moving.`;
+  }
+  return null;
+}
+
 export function planChat({ text = '', greeted = false, queueAnnounced = false } = {}) {
   if (queueAnnounced) return { action: 'queue' };
   if (greeted && isPureGreet(text)) return { action: 'greet' };
@@ -126,6 +138,8 @@ export function cannedAck(name) {
 }
 
 export async function composeChatReply(m, { brain, jevReply, timeoutMs = REPLY_BRAIN_TIMEOUT_MS } = {}) {
+  const known = factReply(m?.text, m?.name);
+  if (known) return { text: known, emotion: null, gesture: null, source: 'kb' };
   const ack = () => cannedAck(m?.name);
   if (brain && !brain.offline && typeof brain.say === 'function') {
     const shaped = await brain.say('reply', m, { timeoutMs });
