@@ -1489,7 +1489,7 @@ export class GameFeed {
       }
       this.lastPointer = { x: hit.x, y: hit.y, text: hit.text, at: Date.now() };
       log(`game: clicked "${hit.text}" @ ${hit.x},${hit.y}`);
-      await delay(1500);
+      await delay(200);
       return { ok: true, x: hit.x, y: hit.y, text: hit.text, clicked: hit.text };
     } catch (err) {
       this.lastError = err.message;

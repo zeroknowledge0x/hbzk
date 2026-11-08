@@ -5,7 +5,7 @@
 
 import { byName } from './adapters/index.js';
 import { checkAction } from './safety.js';
-import { PLAY_CLICK_LABELS, preferInRoundLabels, shotLine } from './play-labels.js';
+import { preferInRoundLabels, shotLine } from './play-labels.js';
 
 export class Controller {
   constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame }) {
@@ -364,25 +364,31 @@ export class Controller {
       }
     }
     const worldState = this.world?.get?.() || {};
-    const labels = preferInRoundLabels(
-      [...(adapter?.startLabels || []), step.args?.label, ...PLAY_CLICK_LABELS]
+    const controls = Array.isArray(worldState.controls) ? worldState.controls : [];
+    let labels = preferInRoundLabels(
+      [...(adapter?.startLabels || []), step.args?.label]
         .filter(Boolean)
         .filter((v, i, a) => a.findIndex((x) => String(x).toLowerCase() === String(v).toLowerCase()) === i),
-      { phase: worldState.phase, controls: worldState.controls },
+      { phase: worldState.phase, controls },
     );
+    if (controls.length) {
+      const present = labels.filter((label) =>
+        controls.some((c) => String(c).toLowerCase().includes(String(label).toLowerCase())));
+      if (present.length) labels = present;
+    }
     let last = { ok: false, error: 'no play control' };
     for (const label of labels) {
-      last = await this.tools.run('click', { label });
-      if (last?.ok) {
-        await this._snapPlay(last.text || label);
-        return last;
-      }
       if (typeof this.game?.clickText === 'function') {
         const raw = await this.game.clickText(label).catch(() => null);
         if (raw?.ok) {
           await this._snapPlay(raw.text || label);
           return { ok: true, detail: raw };
         }
+      }
+      last = await this.tools.run('click', { label });
+      if (last?.ok) {
+        await this._snapPlay(last.text || label);
+        return last;
       }
     }
     return last;
