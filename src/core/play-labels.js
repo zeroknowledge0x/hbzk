@@ -11,7 +11,6 @@
 export const PLAY_CLICK_LABELS = [
   'Bet',
   'GO',
-  'Go',
   'Random pick',
   'Auto pick',
   'Hit',
@@ -23,12 +22,6 @@ export const PLAY_CLICK_LABELS = [
   'Skip',
   'Same',
   'Cash out',
-  'Over',
-  'Under',
-  'Classic',
-  'Low',
-  'Medium',
-  'High',
   'Play',
   'Start',
 ];

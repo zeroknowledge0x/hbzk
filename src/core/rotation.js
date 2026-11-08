@@ -20,6 +20,7 @@ export class Rotation {
     this.now = typeof now === 'function' ? now : () => Date.now();
     this.intervalMs = Number(intervalMs) || 300000;
     this._timer = null;
+    this._playNow = false;
     this.index = this._load();
   }
 
@@ -33,6 +34,7 @@ export class Rotation {
       if ([...this.playable].some(p=>p.toLowerCase()===candidate.toLowerCase())) { name=candidate; break; }
     }
     this._save();
+    this._playNow = false;
     return name;
   }
 
@@ -47,6 +49,7 @@ export class Rotation {
     const at = this.names.findIndex((n) => n.toLowerCase() === pick.toLowerCase());
     if (at >= 0) this.index = (at + 1) % this.names.length;
     this._save();
+    this._playNow = false;
     return pick;
   }
 
@@ -55,9 +58,14 @@ export class Rotation {
   }
 
   due() {
+    if (this._playNow) return true;
     const last = this._readAt();
     if (last === null) return true;
     return this.now() - last >= this.intervalMs;
+  }
+
+  playNow() {
+    this._playNow = true;
   }
 
   arm(timerFactory) {

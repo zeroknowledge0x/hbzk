@@ -215,6 +215,17 @@ describe('Rotation', () => {
       assert.ok(hi >= 10 * 60 * 1000 && hi <= 60 * 60 * 1000);
     });
 
+    it('playNow makes due() true even inside the interval', () => {
+      const rot = makeRotation({ now: () => 1000, intervalMs: 5000 });
+      rot.next();
+      rot.now = () => 1001;
+      assert.equal(rot.due(), false);
+      rot.playNow();
+      assert.equal(rot.due(), true);
+      rot.random();
+      assert.equal(rot.due(), false);
+    });
+
     it('random() returns a playable name and not always the first', () => {
       const rot = makeRotation();
       const seen = new Set();

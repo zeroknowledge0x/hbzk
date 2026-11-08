@@ -124,10 +124,11 @@ test('a failed plan is logged, never spoken as plan failed', async () => {
   assert.equal(said.some((t) => /plan failed/i.test(t)), false, said.join(' | '));
 });
 
-test('play click vocabulary includes GO, Random pick, Auto pick, Over, Under', () => {
-  for (const need of ['GO', 'Random pick', 'Auto pick', 'Over', 'Under', 'Hit', 'Stand', 'Higher', 'Lower', 'Cash out', 'Skip', 'Same']) {
+test('play click vocabulary includes GO, Random pick, Auto pick, not Over', () => {
+  for (const need of ['GO', 'Random pick', 'Auto pick', 'Hit', 'Stand', 'Higher', 'Lower', 'Cash out', 'Skip', 'Same']) {
     assert.ok(PLAY_CLICK_LABELS.some((l) => l.toLowerCase() === need.toLowerCase()), need);
   }
+  assert.equal(PLAY_CLICK_LABELS.some((l) => /^over$/i.test(l)), false);
   assert.ok(byName('Keno').startLabels.some((l) => /auto pick/i.test(l)));
   assert.ok(byName('Dragon Tower').startLabels.some((l) => /^go$/i.test(l)));
   assert.ok(byName('Hilo').startLabels.some((l) => /^skip$/i.test(l)));

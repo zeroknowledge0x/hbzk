@@ -501,6 +501,7 @@ const allowed = playableList();
 const rotation = new Rotation({file:path.join(process.cwd(),'data','rotation.json'),
   names:String(process.env.CORE_ROTATION || allowed.join(',')).split(',').map(x => x.trim()).filter(x => byName(x)),
   playable:allowed,intervalMs:quietIntervalMs()});
+rotation.playNow();
 const controller = new Controller({world,tools:coreTools,planner,verifier,game,rotation,playable:allowed,log,
   speak:(text,msg={})=>speak(text,'reply',{chatId:msg?.id||null,name:msg?.name||'ops'}),
   seeFrame: async (tag) => {

@@ -261,6 +261,7 @@ export class Controller {
       if (st.failed) {
         this._active = false;
         this.log(`controller: plan failed (${st.error})`);
+        this.rotation?.playNow?.();
       }
       if (st.done) {
         this._active = false;
@@ -283,6 +284,7 @@ export class Controller {
     if (st.failed) {
       this._active = false;
       this.log(`controller: plan failed (${st.error})`);
+      this.rotation?.playNow?.();
       return;
     }
 
