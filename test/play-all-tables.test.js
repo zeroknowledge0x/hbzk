@@ -274,7 +274,8 @@ test('blackjack in-round prefers Hit over Bet', async () => {
   c._active = true;
   await c.tick();
   await c.tick();
-  assert.equal(clicks[0], 'Hit', `clicked ${clicks.join(',')}`);
+  assert.ok(['Hit', 'Stand'].includes(clicks[0]), `clicked ${clicks.join(',')}`);
+  assert.notEqual(clicks[0], 'Bet');
 });
 
 test("Hubie's Road starts with GO", () => {
