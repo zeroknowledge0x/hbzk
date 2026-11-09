@@ -34,6 +34,9 @@ import { createChain, chainLine } from './core/llm-chain.js';
 import { moderate } from './moderation.js';
 import { createMetrics, metricsLine, noteMessage, noteReply, noteUnanswered } from './core/metrics.js';
 import { ledgerLine, loadLedger, noteHuman, noteStart, noteTick, saveLedger } from './uptime.js';
+import { advise, loadPlaybook, playbookLine, record as recordRound, savePlaybook } from './core/playbook.js';
+import { createLatency, latencyLine, noteLine, slowestStage } from './core/latency.js';
+import { alertLine, clearKind, createWatch, evaluate, noteAction, noteSample } from './core/drift.js';
 import { closeBrowser } from './browser.js';
 import { GameFeed } from './game.js';
 import { GamePerception } from './perceive.js';
@@ -117,6 +120,7 @@ const pushAudio = (pcm) => {
     rec.logged = true;
     const dt = now - rec.t0;
     lastFirstPcmMs = dt;
+    mouthLatency = noteLine(mouthLatency, { askedAt: now - dt, firstPcmAt: now, kind: rec.kind || '' });
     const tag = rec.kind === 'greet' ? 'greet' : 'chat';
     log(`${tag}: first_pcm id=${rec.id}${rec.chatId ? ` chat=${rec.chatId}` : ''} dt_ms=${dt}`);
     if (!rec.playbackArmed) {
@@ -226,6 +230,12 @@ if (String(process.env.HUBIE_HUMAN_START || '') === '1') uptimeLedger = noteHuma
 saveLedger(LEDGER_FILE, uptimeLedger);
 log(`hubie: ${ledgerLine(uptimeLedger, Date.now())}`);
 let chatMetrics = createMetrics();
+// Playbook (verified lessons per table), mouth latency budget, and the drift watch.
+const PLAYBOOK_FILE = path.join(process.cwd(), 'data', 'playbook.json');
+let playbook = loadPlaybook(PLAYBOOK_FILE);
+let mouthLatency = createLatency();
+let driftWatch = createWatch();
+log(`hubie: ${playbookLine(playbook)}`);
 const jev = new Jev(c);
 log(jev.enabled
   ? `jev: enabled (${jev.model} @ ${jev.url}, ${jev.timeoutMs} ms, conf ${jev.minConfidence})`
@@ -535,6 +545,9 @@ const rotation = new Rotation({file:path.join(process.cwd(),'data','rotation.jso
   playable:allowed,intervalMs:quietIntervalMs()});
 rotation.playNow();
 const controller = new Controller({world,tools:coreTools,planner,verifier,game,rotation,playable:allowed,log,playQueue,
+  // Only verified rounds reach the playbook; the controller only reads its advice.
+  advise: (table, info) => advise(playbook, table, info),
+  notifyAction: (label) => { driftWatch = noteAction(driftWatch, { action: label }); },
   speak:(text,msg={})=>speak(text,'reply',{chatId:msg?.id||null,name:msg?.name||'ops'}),
   seeFrame: async (tag) => {
     const jpeg = await game.captureLowRes?.();
@@ -628,6 +641,17 @@ async function refreshWorld() {
       balance:p.balance??null,multiplier:settings.multiplier??null,winChance:settings.winChance??null,
       stake:settings.stake??null,round:controller.status().completed,at:Date.now()});
     hostSpeech.observeOutcome(report.outcome).catch(() => {});
+    // A verified local round is the only thing that earns a playbook lesson.
+    const outcome = report.outcome;
+    if (outcome && outcome.confirmed !== false && (outcome.source === 'local-round' || outcome.local === true)) {
+      const table = adapter?.name || world.get().game || 'unknown';
+      playbook = recordRound(playbook, table, {
+        verified: true,
+        won: outcome.won === true ? true : outcome.won === false ? false : null,
+        multiplier: outcome.payoutMultiplier ?? outcome.multiplier ?? outcome.value ?? null,
+      });
+      savePlaybook(PLAYBOOK_FILE, playbook);
+    }
     state.round=controller.status().completed;
     bus.emit('world',world.get());
   } catch(err) { log(`perceive: refresh failed: ${err.message}`); }
@@ -953,6 +977,16 @@ setInterval(() => {
   uptimeLedger = noteTick(uptimeLedger, Date.now());
   saveLedger(LEDGER_FILE, uptimeLedger);
   log(`hubie: ${ledgerLine(uptimeLedger, Date.now())} · ${metricsLine(chatMetrics, Date.now())} · ${chainLine(llmChain, Date.now())}`);
+  // Drift watch: the same three signals that have actually broken a run here.
+  driftWatch = noteSample(driftWatch, { frameAgeMs, frameMs: tick.avg, at: Date.now() });
+  driftWatch = evaluate(driftWatch, Date.now());
+  const drift = alertLine(driftWatch, Date.now());
+  if (drift !== 'DRIFT clean') {
+    log(`${drift} · slowest stage ${slowestStage(mouthLatency)}`);
+    if (/stuck-loop|capture-stall/.test(drift)) controller.rotation?.playNow?.();
+    for (const kind of ['stuck-loop', 'encoder-drift', 'capture-stall']) driftWatch = clearKind(driftWatch, kind);
+  }
+  log(`hubie: ${playbookLine(playbook)} · ${latencyLine(mouthLatency)}`);
 }, 60000).unref?.();
 
 async function main() {

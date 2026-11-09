@@ -5,6 +5,7 @@ import { isPlayable } from './play-queue.js';
 import { sanitize } from './brain.js';
 import { gestureFromCue } from './host-cue.js';
 import { chooseRotateGame, groundReaction } from './perceive.js';
+import { withCover } from './core/latency.js';
 
 const TICK_MS = 1000;
 const JEV_MIN_MS = 4000; // HTTP Jev every tick saturates RDP CPU/audio
@@ -1115,7 +1116,16 @@ export class AgentLoop {
     const screen = this.#screenState();
     const payload = { segment, game: table };
     if (screen) payload.state = screen;
-    Promise.resolve(this.brain.say('idle', payload))
+    // Cover an unavoidable wait instead of leaving dead air: if the model is still thinking
+    // after ~1.4 s the mouth says something short and factual-free (voice-agent guidance:
+    // "say 'let me check' before slow work, so the listener never hears silence").
+    withCover(this.brain.say('idle', payload), {
+      isBusy: () => Boolean(this.stopped) || this.talkInFlight || this.talkQueue.some((q) => q.priority >= TALK_IDLE),
+      onCover: (line) => {
+        this.#enqueueTalk(line, 'ingame:cover');
+        log('agent: cover line (brain slow)');
+      },
+    })
       .then((shaped) => {
         this.idleCompose = false;
         if (this.stopped) return;

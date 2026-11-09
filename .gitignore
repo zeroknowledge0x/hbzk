@@ -63,3 +63,6 @@ data/rotation.json
 
 # Unattended-run ledger (runtime state, survives restarts on the host)
 data/uptime.json
+
+# Verified lessons per table (runtime state, built from settled rounds)
+data/playbook.json

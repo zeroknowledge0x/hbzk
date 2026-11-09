@@ -8,9 +8,10 @@ import { checkAction } from './safety.js';
 import { labelMatchesPlay } from './play-labels.js';
 import { kenoNumbers, readObservedProgress } from './progress.js';
 import { cashoutLine } from './play-talk.js';
+import { createScratch, exhausted, noteFailure, noteSuccess, openTask } from './reflexion.js';
 
 export class Controller {
-  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random, now }) {
+  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random, now, advise, notifyAction }) {
     this.world = world;
     this.tools = tools;
     this.planner = planner;
@@ -31,6 +32,10 @@ export class Controller {
     this._lastShotTalk = 0;
     this.random = typeof random === 'function' ? random : Math.random;
     this.now = typeof now === 'function' ? now : Date.now;
+    // Playbook advice (verified lessons) and the drift watch's action tap.
+    this.advise = typeof advise === 'function' ? advise : null;
+    this.notifyAction = typeof notifyAction === 'function' ? notifyAction : null;
+    this.scratch = createScratch();
     // Breathing room between rounds. Without it a table whose "round" is one click (Hilo
     // skip, Dice bet) replans the instant it finishes and looks like a click bot.
     this._nextRoundAt = 0;
@@ -275,6 +280,7 @@ export class Controller {
         if (!next) return;
         this._nextRoundAt = 0;
         this.planner.setGoal({ kind: 'play', game: next.game, rounds: 1 });
+        this.scratch = openTask(this.scratch, `play ${next.game}`);
         this._active = true;
         this.playQueue.holdMs(now);
         this.log(`controller: chat switch ${next.name} -> ${next.game}`);
@@ -292,6 +298,7 @@ export class Controller {
       }
       if (!name || !this.playable.has(name.toLowerCase())) return;
       this.planner.setGoal({kind: 'play', game: name, rounds: rotate ? 3 : 1});
+      this.scratch = openTask(this.scratch, `play ${name}`);
       this._active = true;
     }
 
@@ -303,11 +310,20 @@ export class Controller {
         this._active = false;
         this._nextRoundAt = this.now() + this._dwell();
         this.log(`controller: plan failed (${st.error})`);
-        this.rotation?.playNow?.();
+        // Reflexion: keep one verbal lesson, and after a few tries ask for a different table
+        // instead of grinding the same failure.
+        this.scratch = noteFailure(this.scratch, { step: this.scratch.task || st.goal?.game || 'round', error: st.error || 'unknown' });
+        if (exhausted(this.scratch)) {
+          this.log(`controller: giving up on ${this.scratch.task || 'this table'} after ${this.scratch.attempts} tries`);
+          this.rotation?.playNow?.();
+          this._nextRoundAt = 0;
+          this.scratch = noteSuccess(this.scratch);
+        }
       }
       if (st.done) {
         this._active = false;
         this._nextRoundAt = this.now() + this._dwell();
+        this.scratch = noteSuccess(this.scratch);
       }
       return;
     }
@@ -333,8 +349,14 @@ export class Controller {
     if (st.failed) {
       this._active = false;
       this._nextRoundAt = this.now() + this._dwell();
+      this.scratch = noteFailure(this.scratch, { step: this.scratch.task || 'round', error: st.error || 'unknown' });
       this.log(`controller: plan failed (${st.error})`);
-      this.rotation?.playNow?.();
+      if (exhausted(this.scratch)) {
+        this.log(`controller: giving up on ${this.scratch.task} after ${this.scratch.attempts} tries`);
+        this.rotation?.playNow?.();
+        this._nextRoundAt = 0;
+        this.scratch = noteSuccess(this.scratch);
+      }
       return;
     }
 
@@ -492,8 +514,10 @@ export class Controller {
       await this._snapPlay(raw.text || label);
       if (/^cash out/i.test(String(label))) {
         // Say why the round was taken off the table: a click with a reason reads as a host.
-        this.speak(cashoutLine(gameName, { progress }), {});
+        const lesson = this.advise?.(gameName, { progress }) || null;
+        this.speak(lesson ? `${cashoutLine(gameName, { progress })} ${lesson}.` : cashoutLine(gameName, { progress }), {});
       }
+      this.notifyAction?.(String(label));
       return { ok: true, detail: raw };
     }
     const raw = await this.tools.run('click', { label });

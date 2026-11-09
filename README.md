@@ -105,6 +105,10 @@ chat jumps the queue.
 | `src/moderation.js` | Follow/view scams and automation pitches are classified and never read aloud |
 | `src/core/metrics.js` | Messages in, answered, reply latency and ignored questions, written to the log each minute |
 | `src/core/allowlist.js` | Only housebets.com and kick.com are navigable |
+| `src/core/playbook.js` | Verified lessons per table (Voyager-style skill library): only a settled round is stored, and the host reads them back as one line of advice |
+| `src/core/reflexion.js` | Verbal self-critique after a failed round, carried into the retry; after four tries the host asks for a different table instead of grinding |
+| `src/core/latency.js` | Mouth latency budget (`p50`/`p95`, slowest stage named) and the short cover line that prevents dead air when the brain is slow |
+| `src/core/drift.js` | Drift watch: stuck click loops, encoder frame-time drift and capture stalls become an alert the next tick reacts to |
 | `clickText` actionability | A click fails loudly when the target is covered, off-screen or moving, and scrolls a below-the-fold target into view first |
 
 ## Layout
