@@ -931,20 +931,22 @@ async function main() {
   await renderer.warmArt();
   voice.start();
   await game.start();
-  // Cloudflare can outlast the first launch return. Retry the card click; never publish the challenge.
-  const gateUntil = Date.now() + 120000;
-  while (!/^https:\/\/www\.housebets\.com\/games\/housegames-/i.test(game.page?.url?.() || '') && Date.now() < gateUntil) {
-    if (!/just a moment/i.test(`${game.title || ''} ${game.page?.url?.() || ''}`)) {
+  // Cloudflare can outlast the first launch return. Keep entering the table and
+  // rearming capture until the composite is provably a live House Game.
+  const gateUntil = Date.now() + 180000;
+  let launchCheck = broadcastReadiness(game);
+  while (!launchCheck.ok && Date.now() < gateUntil) {
+    const url = game.page?.url?.() || '';
+    if (!/^https:\/\/www\.housebets\.com\/games\/housegames-/i.test(url)
+      && !/just a moment/i.test(`${game.title || ''} ${url}`)) {
       await game.openGameByCard('Dice').catch(() => null);
+    } else if (!launchCheck.ok && typeof game.reviveCapture === 'function') {
+      await game.reviveCapture({ timeoutMs: 5000 }).catch(() => null);
     }
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await game.page?.bringToFront?.().catch(() => null);
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    launchCheck = broadcastReadiness(game);
   }
-  await game.page?.bringToFront?.();
-  const readyDeadline = Date.now() + 20000;
-  while (!broadcastReadiness(game).ok && Date.now() < readyDeadline) {
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  const launchCheck = broadcastReadiness(game);
   if (!launchCheck.ok) throw new Error(`Broadcast refused: ${launchCheck.reason}`);
   log('hubie: broadcast gate passed (fresh playable table pixels)');
   startEncoder();
