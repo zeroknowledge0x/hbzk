@@ -78,6 +78,7 @@ Offline unit tests. They do not need Chrome or a stream key.
 | --- | --- |
 | [docs/per-game.md](docs/per-game.md) | Buttons measured on every House table, the policy file per table, how progress is observed |
 | [docs/table-variety.md](docs/table-variety.md) | Variety chips per table, quiet-talk timer, payout-vs-target rule |
+| [docs/runtime.md](docs/runtime.md) | Why a restart must not re-download ffmpeg, and what a spent LLM quota looks like in the log |
 
 ## Layout
 

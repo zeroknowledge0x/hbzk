@@ -118,6 +118,16 @@ async function ensureFfmpeg() {
   return bin;
 }
 
+// Is an ffmpeg runnable from PATH? The encoder's bin() falls back to PATH when vendor/ is empty.
+function hasSystemFfmpeg() {
+  try {
+    execFileSync(exeName('ffmpeg'), ['-version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function findFile(dir, name) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, entry.name);
@@ -155,13 +165,17 @@ async function main() {
   const voiceFile = path.join(VENDOR, 'voices', `${voice}.onnx`);
 
   if (checkOnly) {
-    const missing = [piper, ffmpeg, voiceFile].filter((p) => !exists(p));
+    // A bundled ffmpeg is preferred, but an ffmpeg already on PATH works exactly the same
+    // for the encoder (`bin()` falls back to PATH). Without this the supervisor re-downloads
+    // the 115 MB build on every restart of a 24/7 run.
+    const missing = [piper, voiceFile].filter((p) => !exists(p));
+    if (!exists(ffmpeg) && !hasSystemFfmpeg()) missing.push(ffmpeg);
     if (missing.length) {
       console.error('[bootstrap] missing vendor files:\n  ' + missing.join('\n  '));
       console.error('[bootstrap] run: npm run bootstrap');
       process.exit(2);
     }
-    console.log('[bootstrap] vendor ready');
+    console.log(`[bootstrap] vendor ready (ffmpeg: ${exists(ffmpeg) ? 'bundled' : 'system'})`);
     return;
   }
 
