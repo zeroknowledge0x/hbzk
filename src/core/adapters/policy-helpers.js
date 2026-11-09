@@ -8,7 +8,9 @@ export function has(controls, label) {
   const q = String(label).toLowerCase().replace(/\s+/g, ' ').trim();
   if (!q) return false;
   return (controls || []).some((c) => {
-    const text = String(c).trim().toLowerCase().replace(/\s+/g, ' ');
+    // Keyboard hints ride along in the snapshot ("Classic (Q)", "Skip card (Q)"), so the
+    // comparison runs on the label without the trailing shortcut.
+    const text = String(c).trim().toLowerCase().replace(/\s+/g, ' ').replace(/\s*\([a-z0-9]\)$/, '');
     if (!text) return false;
     if (text === q) return true;
     if (NEVER_PLAY.test(text)) return false;

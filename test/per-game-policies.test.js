@@ -45,3 +45,19 @@ test('Max Win always offers a target multiplier', () => {
     assert.ok([10, 50, 100, 1000].includes(action.multi), `multi=${action.multi}`);
   }
 });
+
+test('keyboard hints in the snapshot do not hide a risk chip', () => {
+  const adapter = byName('Keno');
+  const controls = ['Bet', 'Classic (Q)', 'Low (Q)', 'Medium (Q)', 'High (Q)'];
+  const action = adapter.decide({ controls }, () => 0);
+  assert.equal(action.settings, 'Classic');
+  const last = adapter.decide({ controls }, () => 0.99);
+  assert.equal(last.settings, 'High');
+});
+
+test('a stake shortcut is still never read as a multiplier preset', () => {
+  const adapter = byName('Limbo');
+  const controls = ['Bet', '2× Double bet amount (S)', '2x', '5x'];
+  const action = adapter.decide({ controls }, () => 0.99);
+  assert.equal(action.settings, '5x');
+});
