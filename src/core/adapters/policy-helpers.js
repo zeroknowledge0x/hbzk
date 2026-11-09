@@ -3,6 +3,7 @@
 // "2× Double bet amount (S)" beside the real Bet button, and treating either as Bet is
 // how the host opened the bet editor instead of playing.
 const NEVER_PLAY = /\b(info|history|rules|fair|help|amount|halve|double|wallet)\b/;
+export { NEVER_PLAY };
 
 export function has(controls, label) {
   const q = String(label).toLowerCase().replace(/\s+/g, ' ').trim();
@@ -30,3 +31,7 @@ export function available(controls, labels, rand = Math.random) {
 }
 export function cashoutAvailable(controls) { return has(controls, 'Cash out'); }
 export function pick(values, rand = Math.random) { return choose(values, rand); }
+
+// A setting can only be changed while the table is not busy: mid-round is obvious, and
+// `settling` still shows the payout readout, so the field stays untouched there too.
+export function isIdle(phase) { return phase !== 'playing' && phase !== 'settling'; }

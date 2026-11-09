@@ -18,6 +18,7 @@
     "art": "node scripts/fetch-art.mjs",
     "layers": "node scripts/make-layers.mjs",
     "test": "node --test \"test/**/*.js\"",
+    "logic:audit": "node scripts/logic-audit.mjs",
     "host": "node src/index.js"
   },
   "dependencies": {

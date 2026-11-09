@@ -109,6 +109,7 @@ chat jumps the queue.
 | `src/core/reflexion.js` | Verbal self-critique after a failed round, carried into the retry; after four tries the host asks for a different table instead of grinding |
 | `src/core/latency.js` | Mouth latency budget (`p50`/`p95`, slowest stage named) and the short cover line that prevents dead air when the brain is slow |
 | `src/core/drift.js` | Drift watch: stuck click loops, encoder frame-time drift and capture stalls become an alert the next tick reacts to |
+| `scripts/logic-audit.mjs` | Sweeps all eleven tables × phases × control shapes (1,320 policy cases + 69 controller steps) and fails on a dead end, an off-table label, a mid-round setting write or a click without a verified zero stake |
 | `clickText` actionability | A click fails loudly when the target is covered, off-screen or moving, and scrolls a below-the-fold target into view first |
 
 ## Layout
