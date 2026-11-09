@@ -429,13 +429,20 @@ export class Controller {
         const result = await this.game.clickText('Auto pick');
         if (!result?.ok) return { ok: false, error: 'auto pick unavailable' };
       } else {
+        // Keno keeps the previous round's selection on the board and greys those tiles out,
+        // so a later round can fail every click and look like "no numbers selected".
+        if (controls.some((c) => labelMatchesPlay('Clear table', c))) {
+          await this.game.clickText('Clear table').catch(() => null);
+        }
         const spots = kenoNumbers(controls);
         for (let i = spots.length - 1; i > 0; i--) {
           const j = Math.floor(this.random() * (i + 1));
           [spots[i], spots[j]] = [spots[j], spots[i]];
         }
+        const want = 2 + Math.floor(this.random() * 3);
         let picked = 0;
-        for (const n of spots.slice(0, 2 + Math.floor(this.random() * 3))) {
+        for (const n of spots) {
+          if (picked >= want) break;
           if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
           const spot = await this.game.clickText(String(n)).catch(() => null);
           if (spot?.ok) picked++;

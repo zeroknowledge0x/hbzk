@@ -36,7 +36,17 @@ test('the bet amount field is never mistaken for the Bet button',async()=>{
  const result=await c._executeStep(step);assert.equal(result.ok,false);assert.deepEqual(calls,[]);
 });
 
-test('controller never calls Mines tile helper for Dragon Tower',async()=>{
+test('Keno clears the leftover selection before picking new numbers', async () => {
+  const board = ['Clear table', 'Auto pick numbers at random (R)', 'Bet'];
+  for (let n = 1; n <= 20; n++) board.push(`${n} Number ${n}`);
+  const { c, calls } = fixture('Keno', board, 'idle', () => 0.9);
+  const result = await c._executeStep(step);
+  assert.equal(result.ok, true);
+  assert.equal(calls[0], 'Clear table');
+  assert.ok(calls.includes('Bet'), `clicked ${calls.join(',')}`);
+});
+
+test('controller never calls the Mines tile helper for Dragon Tower', async () => {
  const {c,calls}=fixture('Dragon Tower',['Bet','Random pick'],'idle');
  const result=await c._executeStep(step);assert.equal(result.ok,true);assert.deepEqual(calls,['Bet']);
 });
