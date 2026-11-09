@@ -50,6 +50,29 @@ Two traps the probe exposed, both now covered by tests:
 | Blackjack | `adapters/blackjack-policy.js` | `Bet`/`Deal`, then `Hit` or `Stand`; `No thanks` dismisses insurance |
 | Hubie's Road | `adapters/hubie-road-policy.js` | `Bet`/`Go`, then lanes, cash out after progress |
 
+## Decision order, table by table
+
+Every round is one request to the policy for a single action, and the action is verified on
+the live page before it is clicked. Stake is re-read as `0` before each click.
+
+| Table | Table idle | In a round | Cash out |
+| --- | --- | --- | --- |
+| Dice | click one of `Over`/`Under`/`Inside`/`Outside`, then `Bet` | nothing to do (one click resolves) | never |
+| Mines | `Bet` | `Random tile` if offered, otherwise one unrevealed tile | `Cash out` when tiles are already revealed, at most 40% of the decisions, otherwise keep picking |
+| Plinko | click `Low`/`Medium`/`High`, then `Bet` | — | never |
+| Keno | click `Classic`/`Low`/`Medium`/`High` chip, `Clear table` if the last round left picks, then 2-4 numbers or `Auto pick`, then `Bet` | — | never |
+| Wheel | click `Low`/`Medium`/`High`, then `Bet` | — | never |
+| Limbo | click one target preset (`1.5x`/`5x`/`10x`/`100x`), then `Bet` | — | never |
+| Max Win | `Bet` (the 1,000× mode is already on the table) | — | never |
+| Dragon Tower | `Bet` | `Random pick` if offered, otherwise an enabled floor tile | `Cash out` once a floor is behind it, 40% of the decisions at most |
+| Hilo | `Bet` to deal | `Higher / same` or `Lower / same` | `Cash out` when no climb is offered; `Skip card` only as a last resort |
+| Blackjack | `Bet`/`Deal`; `No thanks` if insurance is offered | `Hit` or `Stand` | never |
+| Hubie's Road | `Bet`, or `Go` while idle | next lane | `Cash out` once a lane is behind it, 40% of the decisions at most |
+
+Rhythm: a round is `enter_game` (lobby card click, never `page.goto`) → `start_round` (the
+action above) → `await_result`. Rounds are 6-15 s apart, the table changes every 10-60 min,
+and a game a viewer asked for in chat jumps the queue.
+
 ## Progress is observed, never counted
 
 `src/core/progress.js` derives how far a round has gone from the board on screen, not from
