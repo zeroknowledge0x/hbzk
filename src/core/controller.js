@@ -465,13 +465,17 @@ export class Controller {
       }
     }
     let currentControls = controls;
-    if (choice.pick && choice.label && !controls.some((c) => labelMatchesPlay(choice.label, c))
+    if (choice.label && !controls.some((c) => labelMatchesPlay(choice.label, c))
       && typeof this.game?.getUiSnapshot === 'function') {
       const snap = await this.game.getUiSnapshot({ force: true });
-      currentControls = (snap?.clickables || []).map((item) => String(item?.text || '').trim());
+      const fresh = (snap?.clickables || []).map((item) => String(item?.text || '').trim()).filter(Boolean);
+      if (fresh.length) currentControls = fresh;
     }
     const label = choice.label;
-    if (!label || !currentControls.some((c) => labelMatchesPlay(label, c))) return { ok: false, error: 'no visible play control' };
+    if (!label || !currentControls.some((c) => labelMatchesPlay(label, c))) {
+      this.log(`controller: "${label || 'nothing'}" is not on the table (saw: ${currentControls.slice(0, 10).join(' | ').slice(0, 240)})`);
+      return { ok: false, error: 'no visible play control' };
+    }
     if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
     if (typeof this.game?.clickText === 'function') {
       const raw = await this.game.clickText(label).catch(() => null);
