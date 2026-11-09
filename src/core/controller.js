@@ -9,7 +9,7 @@ import { labelMatchesPlay } from './play-labels.js';
 import { kenoNumbers, readObservedProgress } from './progress.js';
 
 export class Controller {
-  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random }) {
+  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random, now }) {
     this.world = world;
     this.tools = tools;
     this.planner = planner;
@@ -29,7 +29,14 @@ export class Controller {
     this._demoAttempts = 0;
     this._lastShotTalk = 0;
     this.random = typeof random === 'function' ? random : Math.random;
+    this.now = typeof now === 'function' ? now : Date.now;
+    // Breathing room between rounds. Without it a table whose "round" is one click (Hilo
+    // skip, Dice bet) replans the instant it finishes and looks like a click bot.
+    this._nextRoundAt = 0;
   }
+
+  // 6-15 s, the same band the quiet-talk timer uses for a human beat.
+  _dwell() { return 6000 + Math.floor(this.random() * 9000); }
 
   // ── public API ──────────────────────────────────────────────────────────────
 
@@ -265,12 +272,15 @@ export class Controller {
         if (this.playQueue.size > 1 && this.playQueue.due(now)) this.playQueue.shift();
         const next = this.playQueue.peek();
         if (!next) return;
+        this._nextRoundAt = 0;
         this.planner.setGoal({ kind: 'play', game: next.game, rounds: 1 });
         this._active = true;
         this.playQueue.holdMs(now);
         this.log(`controller: chat switch ${next.name} -> ${next.game}`);
         return;
       }
+      // A viewer request jumps the dwell; an unattended round waits for it.
+      if (this.now() < this._nextRoundAt) return;
       if (typeof this.rotation?.due !== 'function') return;
       const rotate = this.rotation.due();
       let name = null;
@@ -290,11 +300,13 @@ export class Controller {
       const st = this.planner.status();
       if (st.failed) {
         this._active = false;
+        this._nextRoundAt = this.now() + this._dwell();
         this.log(`controller: plan failed (${st.error})`);
         this.rotation?.playNow?.();
       }
       if (st.done) {
         this._active = false;
+        this._nextRoundAt = this.now() + this._dwell();
       }
       return;
     }
@@ -319,6 +331,7 @@ export class Controller {
     const st = this.planner.status();
     if (st.failed) {
       this._active = false;
+      this._nextRoundAt = this.now() + this._dwell();
       this.log(`controller: plan failed (${st.error})`);
       this.rotation?.playNow?.();
       return;
@@ -332,6 +345,7 @@ export class Controller {
 
     if (st.done) {
       this._active = false;
+      this._nextRoundAt = this.now() + this._dwell();
     }
   }
 
