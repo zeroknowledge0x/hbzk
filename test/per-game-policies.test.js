@@ -26,3 +26,22 @@ test('Dice never chooses an unrelated cashout', () => {
   const action = adapter.decide({ phase: 'idle', controls: ['Bet', 'Cash out $0.00'] }, () => 0);
   assert.equal(action.label, 'Bet');
 });
+
+test('Dice alternates between the range chip and a written multiplier', () => {
+  const adapter = byName('Dice');
+  const controls = ['Bet', 'Over', 'Under', 'Inside', 'Outside'];
+  const chip = adapter.decide({ phase: 'idle', controls }, () => 0.99);
+  assert.equal(chip.settings, 'Outside');
+  assert.equal(chip.multi, null);
+  const multi = adapter.decide({ phase: 'idle', controls }, () => 0);
+  assert.equal(multi.settings, null);
+  assert.ok([1.5, 2, 3, 5, 10].includes(multi.multi), `multi=${multi.multi}`);
+});
+
+test('Max Win always offers a target multiplier', () => {
+  const adapter = byName('Max Win');
+  for (const r of [0, 0.4, 0.9]) {
+    const action = adapter.decide({ controls: ['Bet'] }, () => r);
+    assert.ok([10, 50, 100, 1000].includes(action.multi), `multi=${action.multi}`);
+  }
+});

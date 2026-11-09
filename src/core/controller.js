@@ -425,6 +425,14 @@ export class Controller {
     const progress = readObservedProgress(gameName, { ...(worldState.report || {}), controls });
     const choice = adapter.decide({ phase: worldState.phase, controls, progress }, this.random);
     if (!choice) return { ok: false, error: 'no measured action' };
+    // A table with a writable payout field gets a random target on the way in. Best effort:
+    // the setter verifies its own readback, and a table that cannot write it still plays.
+    if (worldState.phase !== 'playing' && Number.isFinite(choice.multi)
+      && typeof this.game?.setMultiplier === 'function') {
+      if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
+      const set = await this.game.setMultiplier(choice.multi).catch(() => null);
+      this.log(`controller: multiplier ${choice.multi}x ${set?.ok ? `set (${set.observed}x)` : `skipped (${set?.error || 'no control'})`}`);
+    }
     if (worldState.phase !== 'playing' && choice.settings && typeof this.game?.clickText === 'function') {
       if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
       const setting = await this.game.clickText(choice.settings).catch(() => null);

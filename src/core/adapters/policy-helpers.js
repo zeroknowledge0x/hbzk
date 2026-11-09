@@ -27,3 +27,4 @@ export function available(controls, labels, rand = Math.random) {
   return choose(labels.filter((label) => has(controls, label)), rand);
 }
 export function cashoutAvailable(controls) { return has(controls, 'Cash out'); }
+export function pick(values, rand = Math.random) { return choose(values, rand); }

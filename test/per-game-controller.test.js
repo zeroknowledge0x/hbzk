@@ -31,7 +31,41 @@ test('Dragon Tower cashes out once the floors below it are cleared',async()=>{
  const result=await c._executeStep(step);assert.equal(result.ok,true);assert.deepEqual(calls,['Cash out']);
 });
 
-test('the bet amount field is never mistaken for the Bet button',async()=>{
+function fixtureMulti(name, controls, phase, random) {
+  const world = new World({ game: name, phase, controls, stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: name, rounds: 1 });
+  const calls = [];
+  const game = {
+    setStake: async () => ({ ok: true, verified: true, observed: 0 }),
+    setMultiplier: async (v) => { calls.push(['multi', v]); return { ok: true, observed: v, verified: true }; },
+    clickText: async (label) => { calls.push(['click', label]); return { ok: true, text: label }; },
+    getReport: () => ({ url: 'https://www.housebets.com/games/housegames-dice' }),
+  };
+  const c = new Controller({
+    world, planner, game,
+    tools: { run: async () => ({ ok: false }) },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    random,
+  });
+  return { c, calls };
+}
+
+test('the controller writes the multiplier a policy asked for before it bets', async () => {
+  const { c, calls } = fixtureMulti('Dice', ['Bet', 'Over', 'Under', 'Inside', 'Outside'], 'idle', () => 0);
+  const result = await c._executeStep(step);
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls[0], ['multi', 1.5], `calls=${JSON.stringify(calls)}`);
+  assert.deepEqual(calls[calls.length - 1], ['click', 'Bet']);
+});
+
+test('a live round never rewrites the multiplier', async () => {
+  const { c, calls } = fixtureMulti('Dice', ['Bet', 'Over', 'Under'], 'playing', () => 0);
+  await c._executeStep(step);
+  assert.equal(calls.some(([what]) => what === 'multi'), false, JSON.stringify(calls));
+});
+
+test('the bet amount field is never mistaken for the Bet button', async () => {
  const {c,calls}=fixture('Mines',['Bet Amount 0.00','2× Double bet amount (S)','Tile 1'],'idle');
  const result=await c._executeStep(step);assert.equal(result.ok,false);assert.deepEqual(calls,[]);
 });
