@@ -10,6 +10,6 @@ export function decide({ phase, controls = [] } = {}, rand = Math.random) {
   if (phase !== 'playing') return { label: 'Bet' };
   const hand = available(controls, ['Higher', 'Lower'], rand);
   if (hand) return { label: hand };
-  if (cashoutAvailable(controls) && rand() < 0.4) return { label: 'Cash out' };
+  if (cashoutAvailable(controls)) return { label: 'Cash out' };
   return { label: available(controls, ['Skip'], rand) };
 }

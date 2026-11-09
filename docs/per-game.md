@@ -46,7 +46,7 @@ Two traps the probe exposed, both now covered by tests:
 | Limbo | `adapters/limbo-policy.js` | one target preset (`1.5x`/`5x`/`10x`/`100x`), then `Bet`. The target is not a payout. |
 | Max Win | `adapters/maxwin-policy.js` | `Bet` only; no invented jackpot number |
 | Dragon Tower | `adapters/dragon-tower-policy.js` | `Bet`, then `Random pick` or a tile, cash out after a climb |
-| Hilo | `adapters/hilo-policy.js` | `Bet` while the table is idle, then `Higher / same`, `Lower / same`, occasionally `Cash out`; `Skip card` is the fallback |
+| Hilo | `adapters/hilo-policy.js` | `Bet` while the table is idle, then `Higher / same` or `Lower / same`; `Cash out` when no climb is offered, `Skip card` as the last resort |
 | Blackjack | `adapters/blackjack-policy.js` | `Bet`/`Deal`, then `Hit` or `Stand`; `No thanks` dismisses insurance |
 | Hubie's Road | `adapters/hubie-road-policy.js` | `Bet`/`Go`, then lanes, cash out after progress |
 

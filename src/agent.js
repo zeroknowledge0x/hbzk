@@ -25,6 +25,18 @@ export const TALK_IDLE = 5;
 // candidate older than this is no longer "now" and must not speak after a greet/reply.
 const TALK_FRESH_MS = 2000;
 
+// Outcome colour is only worth saying while it is still news. Two clocks: how long the line
+// sat in this queue (a backlog must not read out late), and how old the sensor says the
+// event is (a result from a minute ago is not news). A round event routinely arrives with an
+// eventAt one poll — about five seconds — behind, and measuring only against that dropped
+// every win line the moment it was enqueued.
+const TALK_EVENT_MAX_MS = 10000;
+export function talkIsStale(line, now = Date.now(), freshMs = TALK_FRESH_MS) {
+  if (!line || Number(line.priority) < TALK_WIN) return false;
+  if (now - (line.at || now) > freshMs) return true;
+  return !!line.eventAt && now - line.eventAt > TALK_EVENT_MAX_MS;
+}
+
 export function talkPriority(reason) {
   const tag = String(reason || '');
   if (/^greet/i.test(tag)) return TALK_GREET;
@@ -967,7 +979,7 @@ export class AgentLoop {
       const before = this.talkQueue.length;
       this.talkQueue = this.talkQueue.filter((q) => {
         const age = now - (q.at || now);
-        const stale = q.priority >= TALK_WIN && age > TALK_FRESH_MS;
+        const stale = talkIsStale(q, now);
         if (stale) log(`talk: expired id=${q.id || '?'} reason=${q.reason || '?'} age_ms=${age}`);
         return !stale;
       });
@@ -1050,10 +1062,10 @@ export class AgentLoop {
     }
     const now = Date.now();
     const line = this.talkQueue[idx];
-    // Outcome colour older than ~2 s is stale. Chat replies are not.
-    if (line.priority >= TALK_WIN && line.eventAt && now - line.eventAt > TALK_FRESH_MS) {
+    if (talkIsStale(line, now)) {
       this.talkQueue.splice(idx, 1);
-      log(`talk: stale_drop id=${line.id || '?'} reason=${line.reason || '?'} event_age_ms=${now - line.eventAt}`);
+      const waited = now - (line.at || now);
+      log(`talk: stale_drop id=${line.id || '?'} reason=${line.reason || '?'} waited_ms=${waited}`);
       return;
     }
     if (line.priority > TALK_REPLY) {

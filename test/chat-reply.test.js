@@ -230,7 +230,7 @@ test('a stale win is still dropped and a brain timeout becomes a fast canned ack
     speak: async (text) => { spoken.push(text); },
     speakCooldownMs: 0,
   });
-  agent.enqueue('Eh win.', 'react:win', { eventAt: Date.now() - 5000 });
+  agent.enqueue('Eh win.', 'react:win', { eventAt: Date.now() - 60000 });
   agent.start();
   await waitFor(() => agent.talkQueue.length === 0);
   agent.stop();
