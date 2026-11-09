@@ -46,7 +46,7 @@ Two traps the probe exposed, both now covered by tests:
 | Limbo | `adapters/limbo-policy.js` | one target preset (`1.5x`/`5x`/`10x`/`100x`), then `Bet`. The target is not a payout. |
 | Max Win | `adapters/maxwin-policy.js` | `Bet` only; no invented jackpot number |
 | Dragon Tower | `adapters/dragon-tower-policy.js` | `Bet`, then `Random pick` or a tile, cash out after a climb |
-| Hilo | `adapters/hilo-policy.js` | `Higher / same`, `Lower / same`, `Skip card`, or `Cash out` |
+| Hilo | `adapters/hilo-policy.js` | `Bet` while the table is idle, then `Higher / same`, `Lower / same`, occasionally `Cash out`; `Skip card` is the fallback |
 | Blackjack | `adapters/blackjack-policy.js` | `Bet`/`Deal`, then `Hit` or `Stand`; `No thanks` dismisses insurance |
 | Hubie's Road | `adapters/hubie-road-policy.js` | `Bet`/`Go`, then lanes, cash out after progress |
 
@@ -59,6 +59,12 @@ how many clicks were sent:
 - Dragon Tower / Hubie's Road: cleared floors and lanes leave the grid, so the lowest step
   still visible is the next one.
 - Unknown is `0`, so a cashout never fires before a round has actually progressed.
+
+## Rounds are spaced, not spammed
+
+After a goal settles the controller waits a random 6-15 s before starting the next one, so a
+table whose round is a single click (Hilo `Bet`, Dice `Bet`) does not replay every two
+seconds. A game a viewer asked for in chat jumps the wait.
 
 ## Verify
 
