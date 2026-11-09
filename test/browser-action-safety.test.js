@@ -117,3 +117,49 @@ test('verified zero permits demo round actions including cashout and double/spli
     assert.equal(clicks, 1);
   }
 });
+
+// Actionability gate (agent-browser rule): a click reports failure when the target is
+// covered or still moving, and scrolls a below-the-fold target into view before clicking.
+test('clickText refuses a target that another element covers', async (t) => {
+  const { page, feed } = await fixture(t, `
+    <button>Bet</button>
+    <div style="position:fixed;inset:0;z-index:9;background:rgba(0,0,0,.1)">Cookie notice</div>`);
+  await page.evaluate(() => { window.clicks = 0; document.addEventListener('click', () => window.clicks++); });
+  const out = await feed.clickText('Bet');
+  assert.equal(out.ok, false);
+  assert.match(String(out.error), /blocked by/i);
+  assert.equal(await page.evaluate(() => window.clicks), 0);
+  assert.equal(feed.lastPointer, null);
+});
+
+test('clickText scrolls a below-the-fold target into view, then clicks it', async (t) => {
+  const { page, feed } = await fixture(t, `
+    <div style="height:2600px"></div><button id="low">Bet</button>`);
+  await page.evaluate(() => { window.clicks = 0; document.getElementById('low').addEventListener('click', () => window.clicks++); });
+  const out = await feed.clickText('Bet');
+  assert.equal(out.ok, true, JSON.stringify(out));
+  assert.equal(await page.evaluate(() => window.clicks), 1);
+  const inView = await page.evaluate(() => {
+    const r = document.getElementById('low').getBoundingClientRect();
+    return r.top >= 0 && r.bottom <= window.innerHeight;
+  });
+  assert.equal(inView, true);
+});
+
+test('clickText refuses a target that is still moving', async (t) => {
+  const { page, feed } = await fixture(t, `<button id="mv">Bet</button>`);
+  await page.evaluate(() => {
+    window.clicks = 0;
+    const el = document.getElementById('mv');
+    el.addEventListener('click', () => window.clicks++);
+    // Deterministic drift: every geometry read finds the button 40 px further right, which is
+    // what a slider or an animating panel looks like to the gate.
+    const orig = el.getBoundingClientRect.bind(el);
+    let n = 0;
+    el.getBoundingClientRect = () => { n += 1; const r = orig(); return new DOMRect(r.x + n * 40, r.y, r.width, r.height); };
+  });
+  const out = await feed.clickText('Bet');
+  assert.equal(out.ok, false);
+  assert.match(String(out.error), /moving/i);
+  assert.equal(await page.evaluate(() => window.clicks), 0);
+});

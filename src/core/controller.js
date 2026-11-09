@@ -7,6 +7,7 @@ import { byName } from './adapters/index.js';
 import { checkAction } from './safety.js';
 import { labelMatchesPlay } from './play-labels.js';
 import { kenoNumbers, readObservedProgress } from './progress.js';
+import { cashoutLine } from './play-talk.js';
 
 export class Controller {
   constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random, now }) {
@@ -489,6 +490,10 @@ export class Controller {
       const raw = await this.game.clickText(label).catch(() => null);
       if (!raw?.ok) return { ok: false, error: raw?.error || 'not found' };
       await this._snapPlay(raw.text || label);
+      if (/^cash out/i.test(String(label))) {
+        // Say why the round was taken off the table: a click with a reason reads as a host.
+        this.speak(cashoutLine(gameName, { progress }), {});
+      }
       return { ok: true, detail: raw };
     }
     const raw = await this.tools.run('click', { label });

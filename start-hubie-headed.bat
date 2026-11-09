@@ -1,6 +1,8 @@
 @echo off
 cd /d "%~dp0"
 set HUBIE_HEADED=1
+REM A launcher a person runs is a human touch: it restarts the unattended clock.
+set HUBIE_HUMAN_START=1
 REM Desktop grab (gdigrab) fails on this RDP with ffmpeg exit 4294967274, so the working
 REM path is the CDP screencast + capture pump. Set this to desktop only on a bare console.
 set CAPTURE_MODE=screencast

@@ -30,6 +30,10 @@ import { broadcastReadiness } from './broadcast-readiness.js';
 import { HostSpeech } from './host-speech.js';
 import { rankMessages } from './core/priority.js';
 import { classify, pickGreetLine } from './intent.js';
+import { createChain, chainLine } from './core/llm-chain.js';
+import { moderate } from './moderation.js';
+import { createMetrics, metricsLine, noteMessage, noteReply, noteUnanswered } from './core/metrics.js';
+import { ledgerLine, loadLedger, noteHuman, noteStart, noteTick, saveLedger } from './uptime.js';
 import { closeBrowser } from './browser.js';
 import { GameFeed } from './game.js';
 import { GamePerception } from './perceive.js';
@@ -202,7 +206,26 @@ for (let hop = voice; hop?.fallback; hop = hop.fallback) {
 
 const memory = new ViewerMemory(path.join(process.cwd(), 'data', 'viewers.json'));
 const kb = new Knowledge(path.join(process.cwd(), 'data', 'kb.json'));
-const brain = new Brain(c, { memory, kb });
+// Provider chain: the configured endpoint first, then any LLM_FALLBACK_* endpoint, so a
+// spent weekly quota on one plan does not mute the host.
+const llmChain = createChain([
+  { name: 'primary', url: c.llmUrl, model: c.llmModel, key: c.llmKey },
+  ...(c.llmFallbackUrl
+    ? [{ name: 'fallback', url: c.llmFallbackUrl, model: c.llmFallbackModel || c.llmModel, key: c.llmFallbackKey || c.llmKey }]
+    : []),
+]);
+log(`brain: providers -> ${chainLine(llmChain)}`);
+const brain = new Brain(c, { memory, kb, chain: llmChain });
+// Unattended ledger: a supervisor restart keeps the clock, only a human touch resets it.
+// The human boundary is the launcher a person runs (HUBIE_HUMAN_START=1 in start-hubie-*),
+// not the supervisor's own restart loop.
+const LEDGER_FILE = path.join(process.cwd(), 'data', 'uptime.json');
+let uptimeLedger = loadLedger(LEDGER_FILE);
+uptimeLedger = noteStart(uptimeLedger, Date.now(), { restarted: uptimeLedger.lastStartAt !== null });
+if (String(process.env.HUBIE_HUMAN_START || '') === '1') uptimeLedger = noteHuman(uptimeLedger, Date.now());
+saveLedger(LEDGER_FILE, uptimeLedger);
+log(`hubie: ${ledgerLine(uptimeLedger, Date.now())}`);
+let chatMetrics = createMetrics();
 const jev = new Jev(c);
 log(jev.enabled
   ? `jev: enabled (${jev.model} @ ${jev.url}, ${jev.timeoutMs} ms, conf ${jev.minConfidence})`
@@ -371,6 +394,14 @@ function handleChat(m) {
     if (screened.purge) purgeSender(m.name);
     return;
   }
+  const sampled = moderate(m.text);
+  if (!sampled.readAloud) {
+    chatMetrics = noteMessage(chatMetrics, { text: m.text, verdict: sampled.verdict });
+    chatMetrics = noteUnanswered(chatMetrics, { text: m.text, why: sampled.verdict });
+    log(`chat: ${sampled.verdict} muted (strike ${sampled.strikes}, ${Math.round(sampled.timeoutMs / 1000)}s) id=${m.id} name=${m.name}`);
+    return;
+  }
+  chatMetrics = noteMessage(chatMetrics, { text: m.text, verdict: 'ok' });
   const cmpIntent = parseIntent(m.text);
   if (cmpIntent) {
     memory.remember(m.name,m.text,{});
@@ -715,6 +746,7 @@ function speak(text, kind = 'idle', meta = {}) {
 }
 
 async function deliverSpeech(text, kind = 'idle', meta = {}) {
+  if (kind === 'reply') chatMetrics = noteReply(chatMetrics, Date.now());
   const hint = meta && typeof meta === 'object' ? meta : {};
   // Strip a host cue before sanitize so a truncated JSON tail cannot be spoken.
   const cue = takeHostCue(text);
@@ -917,6 +949,10 @@ setInterval(() => {
   const frameAge = game.frameAgeMs;
   const frameAgeS = frameAge < 0 ? -1 : Math.round(frameAge / 1000);
   log(`supervisor: node=1 chat_age_s=${chatAge} poll_errors=${pollErrors} last_first_pcm_ms=${lastFirstPcmMs ?? -1} frame_age_s=${frameAgeS} shots=${game.shotCount || 0} cap_n=${tick.n} cap_ms=${tick.avg} chat_skip=${skipLog}`);
+  // Unattended clock survives restarts; the ledger is what the contest actually scores.
+  uptimeLedger = noteTick(uptimeLedger, Date.now());
+  saveLedger(LEDGER_FILE, uptimeLedger);
+  log(`hubie: ${ledgerLine(uptimeLedger, Date.now())} · ${metricsLine(chatMetrics, Date.now())} · ${chainLine(llmChain, Date.now())}`);
 }, 60000).unref?.();
 
 async function main() {

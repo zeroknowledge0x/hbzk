@@ -49,6 +49,10 @@ export function cfg() {
     llmUrl: process.env.LLM_BASE_URL || 'https://api.commandcode.ai/provider/v1/chat/completions',
     llmKey: process.env.LLM_API_KEY || '',
     llmModel: process.env.LLM_MODEL || 'deepseek/deepseek-v4.1-flash',
+    // Optional second provider, tried when the first is out of quota or unreachable.
+    llmFallbackUrl: process.env.LLM_FALLBACK_URL || '',
+    llmFallbackModel: process.env.LLM_FALLBACK_MODEL || '',
+    llmFallbackKey: process.env.LLM_FALLBACK_KEY || '',
     // Jev: cheap choice model over HTTP, called before the LLM. Reuses the Command Code key.
     jevEnabled: !['0', 'false', 'off', 'no'].includes(String(process.env.JEV_ENABLED ?? '1').toLowerCase()),
     jevUrl: process.env.JEV_URL || 'https://api.commandcode.ai/provider/v1/systemone',

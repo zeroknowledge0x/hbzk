@@ -96,6 +96,17 @@ A round is `enter_game` (lobby card click, never `page.goto`) → `start_round` 
 Rounds are 6-15 s apart, the table changes every 10-60 min, and a game a viewer asks for in
 chat jumps the queue.
 
+## Reliability and observability
+
+| Piece | What it does |
+| --- | --- |
+| `src/uptime.js` | Unattended-run ledger (`data/uptime.json`): a supervisor restart keeps the clock, only a launcher a person runs resets it; prints `UNATTENDED h · BEST h · RESTARTS n` |
+| `src/core/llm-chain.js` | Provider chain: a 429 parks that provider until the reset time it reports and the mouth continues on `LLM_FALLBACK_*` |
+| `src/moderation.js` | Follow/view scams and automation pitches are classified and never read aloud |
+| `src/core/metrics.js` | Messages in, answered, reply latency and ignored questions, written to the log each minute |
+| `src/core/allowlist.js` | Only housebets.com and kick.com are navigable |
+| `clickText` actionability | A click fails loudly when the target is covered, off-screen or moving, and scrolls a below-the-fold target into view first |
+
 ## Layout
 
 ```

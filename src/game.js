@@ -9,6 +9,7 @@ import { DesktopGrab } from './desktop-grab.js';
 import { readSettings, setSetting, zeroStake } from './game-settings.js';
 import { log } from './log.js';
 import { isFrameBlack, shouldPumpCapture, pickLargestRect } from './capture-health.js';
+import { assertAllowed } from './core/allowlist.js';
 import { LocalRoundTracker, observeLocalRoundDom } from './round-events.js';
 
 const WAIT_MS = 1500;
@@ -1561,7 +1562,7 @@ export class GameFeed {
     const needle = String(target || '').trim();
     if (!needle) return { ok: false, error: 'empty target' };
     try {
-      const hit = await this.page.evaluate((want) => {
+      const hit = await this.page.evaluate(async (want) => {
         // Same deep walk as the UI snapshot: Bet/Roll/Manual etc. sit inside the open
         // <dice-game> shadow root and are invisible to document.querySelectorAll.
         const deepAll = (sel, root = document, out = []) => {
@@ -1634,6 +1635,55 @@ export class GameFeed {
         scored.sort((a, b) => b.score - a.score || a.text.length - b.text.length);
         const best = scored[0];
         if (!isEnabled(best.el)) return null;
+        // Actionability, the agent-browser rule: a click must fail loudly when the target is
+        // covered, off-screen or moving, instead of reporting a success the table never saw.
+        const raf = () => new Promise((done) => { requestAnimationFrame(() => setTimeout(done, 20)); });
+        const hitsSelf = (x, y) => {
+          const node = document.elementFromPoint(x, y);
+          if (!node) return false;
+          for (let n = node; n; n = n.parentElement || n.getRootNode?.().host) if (n === best.el) return true;
+          for (let n = best.el; n; n = n.parentElement || n.getRootNode?.().host) if (n === node) return true;
+          return false;
+        };
+        const freePoint = (rect) => {
+          for (const py of [0.5, 0.3, 0.7]) {
+            for (const px of [0.5, 0.3, 0.7]) {
+              const x = Math.round(rect.x + rect.width * px);
+              const y = Math.round(rect.y + rect.height * py);
+              if (x < 1 || y < 1 || x > window.innerWidth - 1 || y > window.innerHeight - 1) continue;
+              if (hitsSelf(x, y)) return { x, y };
+            }
+          }
+          return null;
+        };
+        let rect = best.el.getBoundingClientRect();
+        let point = freePoint(rect);
+        if (!point) {
+          // Below the fold (Blackjack and Plinko sit low in the lobby grid): bring it up first.
+          try { best.el.scrollIntoView({ block: 'center', inline: 'center' }); } catch { /* detached */ }
+          await raf();
+          rect = best.el.getBoundingClientRect();
+          point = freePoint(rect);
+        }
+        if (!point) {
+          const cover = document.elementFromPoint(
+            Math.round(rect.x + rect.width / 2), Math.round(rect.y + rect.height / 2));
+          const coverLabel = cover
+            ? String(cover.innerText || cover.getAttribute?.('aria-label') || cover.tagName || '')
+              .replace(/\s+/g, ' ').trim().slice(0, 40)
+            : '';
+          return { blocked: coverLabel || 'another element' };
+        }
+        // A target that keeps drifting between frames would be clicked off-centre, so sample
+        // it a few times instead of trusting one frame.
+        const before = point;
+        let stable = false;
+        for (let i = 0; i < 3 && !stable; i++) {
+          await raf();
+          const now = freePoint(best.el.getBoundingClientRect());
+          if (now && Math.abs(now.x - before.x) <= 4 && Math.abs(now.y - before.y) <= 4) stable = true;
+        }
+        if (!stable) return { blocked: 'moving target' };
         // A disabled native control (or overridden no-op click) may silently return.
         // Confirm delivery, not an invented game outcome; perception verifies that later.
         let dispatched = false;
@@ -1642,8 +1692,12 @@ export class GameFeed {
         try { best.el.click(); }
         finally { best.el.removeEventListener('click', onClick, true); }
         if (!dispatched) return null;
-        return { text: best.text, x: best.x, y: best.y };
+        return { text: best.text, x: point.x, y: point.y };
       }, needle);
+      if (hit?.blocked) {
+        log(`game: click "${needle}" blocked by ${hit.blocked}`);
+        return { ok: false, error: `blocked by ${hit.blocked}` };
+      }
       if (!hit) {
         log(`game: click "${needle}" not found`);
         return { ok: false, error: 'not found' };
@@ -1685,7 +1739,10 @@ export class GameFeed {
           return null;
         }).catch(() => null);
         if (!home) {
-          await this.page.goto('https://www.housebets.com/casino', { waitUntil: 'domcontentloaded', timeout: 60000 });
+          const target = 'https://www.housebets.com/casino';
+          const allowed = assertAllowed(target);
+          if (!allowed.ok) return { ok: false, reason: allowed.reason };
+          await this.page.goto(target, { waitUntil: 'domcontentloaded', timeout: 60000 });
           await this.#waitClear(this.page, 120000);
         } else {
           await delay(1200);

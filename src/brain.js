@@ -3,6 +3,7 @@
 import { log } from './log.js';
 import { takeHostCue } from './host-cue.js';
 import { formatScreen } from './perceive.js';
+import { noteResult, pickProvider } from './core/llm-chain.js';
 
 const SYSTEM = `You are Hubie, hosting a Housebets promo stream on Kick. You are funning at the table, not a help desk.
 You are the sloth mascot: smug, playful, opinionated, quick to roast the table and then yourself.
@@ -62,11 +63,13 @@ Rules:
 - Return ONLY valid JSON. No prose before/after.`;
 
 export class Brain {
-  constructor(cfg, { memory = null, kb = null, fetchImpl = null } = {}) {
+  constructor(cfg, { memory = null, kb = null, fetchImpl = null, chain = null } = {}) {
     this.cfg = cfg;
     this.memory = memory;
     this.kb = kb;
     this.fetchImpl = fetchImpl || globalThis.fetch.bind(globalThis);
+    // Optional provider chain: when the first plan is out of quota the mouth keeps talking.
+    this.chain = chain;
     this.history = [];
     // Lines that actually went out the speaker, so the next idle can stay on the thread.
     this.spoken = [];
@@ -140,23 +143,54 @@ export class Brain {
   }
 
   async #chat(messages, { maxTokens = 220, temperature = 0.9, timeoutMs = 20000 } = {}) {
-    const body = {
-      model: this.cfg.llmModel,
-      messages,
-      max_tokens: maxTokens,
-      temperature,
-    };
     const ms = Number(timeoutMs) > 0 ? Number(timeoutMs) : 20000;
-    const res = await this.fetchImpl(this.cfg.llmUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.cfg.llmKey}` },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(ms),
-    });
-    if (!res.ok) throw new Error(`LLM HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const data = await res.json();
-    const msg = data?.choices?.[0]?.message || {};
-    return (msg.content || msg.reasoning_content || '').trim();
+    // Try the configured provider, then any provider the chain says is not in cooldown. A
+    // spent quota on one plan must not mute the host when a second key is configured.
+    const chain = this.chain || null;
+    const tried = [];
+    const first = chain ? (pickProvider(chain) || null) : null;
+    const list = [];
+    if (first) list.push(first);
+    list.push({ name: 'primary', url: this.cfg.llmUrl, model: this.cfg.llmModel, key: this.cfg.llmKey });
+    for (const p of (chain ? chain.providers : [])) if (!list.some((x) => x.url === p.url)) list.push(p);
+    let lastErr = null;
+    for (const p of list) {
+      if (!p?.url || tried.includes(p.url)) continue;
+      tried.push(p.url);
+      const body = { model: p.model || this.cfg.llmModel, messages, max_tokens: maxTokens, temperature };
+      let res = null;
+      try {
+        res = await this.fetchImpl(p.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${p.key || this.cfg.llmKey}` },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(ms),
+        });
+      } catch (err) {
+        lastErr = err;
+        if (chain) noteResult(chain, p.name, { err }, Date.now());
+        continue;
+      }
+      let text = '';
+      try { text = typeof res.text === 'function' ? await res.text() : ''; } catch { text = ''; }
+      if (!text && typeof res.json === 'function') {
+        try { text = JSON.stringify(await res.json()); } catch { text = ''; }
+      }
+      if (!res.ok) {
+        lastErr = new Error(`LLM HTTP ${res.status}: ${text.slice(0, 200)}`);
+        if (chain) noteResult(chain, p.name, { status: res.status, body: text }, Date.now());
+        if (p.url !== this.cfg.llmUrl) log(`brain: ${p.name} HTTP ${res.status}, trying the next provider`);
+        continue;
+      }
+      if (chain) noteResult(chain, p.name, { status: res.status, body: text }, Date.now());
+      let data = null;
+      try { data = JSON.parse(text); } catch { data = null; }
+      const msg = data?.choices?.[0]?.message || {};
+      const out = (msg.content || msg.reasoning_content || '').trim();
+      if (out) return out;
+      lastErr = new Error('LLM returned an empty choice');
+    }
+    throw lastErr || new Error('LLM unavailable');
   }
 
   // Agent decisions are strict JSON, not prose: the loop parses one object per tick.
