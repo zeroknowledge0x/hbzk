@@ -91,6 +91,7 @@ test('blackjack start_round clicks Hit when Bet is missing; no result is still o
     planner,
     verifier: { async waitFor() { return { ok: false, error: 'timeout' }; } },
     game: { setStake: async () => ({ok:true,verified:true,observed:0}), getReport: () => ({ url: 'https://www.housebets.com/games/housegames-blackjack' }) },
+    random: () => 0,
     playable: DEFAULT_PLAYABLE,
   });
   planner.setGoal({ kind: 'play', game: 'Blackjack', rounds: 1 });
@@ -164,7 +165,7 @@ test('play click vocabulary includes GO, Random pick, Auto pick, not Over', () =
 });
 
 test('a successful play click snapshots the table frame', async () => {
-  const world = new World({ game: 'Keno', phase: 'idle', controls: ['Bet', 'Auto pick'], stake: 0 });
+  const world = new World({ game: 'Dice', phase: 'idle', controls: ['Bet'], stake: 0 });
   const planner = new Planner({ world });
   const shots = [];
   const c = new Controller({
@@ -180,12 +181,12 @@ test('a successful play click snapshots the table frame', async () => {
     verifier: { async waitFor() { return { ok: false, error: 'timeout' }; } },
     game: {
       setStake: async () => ({ok:true,verified:true,observed:0}),
-      getReport: () => ({ url: 'https://www.housebets.com/games/housegames-keno' }),
+      getReport: () => ({ url: 'https://www.housebets.com/games/housegames-dice' }),
       async snapPlay(tag) { shots.push(tag); return { ok: true, tag }; },
     },
     playable: DEFAULT_PLAYABLE,
   });
-  planner.setGoal({ kind: 'play', game: 'Keno', rounds: 1 });
+  planner.setGoal({ kind: 'play', game: 'Dice', rounds: 1 });
   c._active = true;
   await c.tick();
   await c.tick();

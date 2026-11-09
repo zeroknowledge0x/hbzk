@@ -11,6 +11,29 @@ import dragonTower from './dragon-tower.js';
 import hubieRoad from './hubie-road.js';
 import hilo from './hilo.js';
 import blackjack from './blackjack.js';
+import { decide as diceDecide } from './dice-policy.js';
+import { decide as minesDecide } from './mines-policy.js';
+import { decide as plinkoDecide } from './plinko-policy.js';
+import { decide as kenoDecide } from './keno-policy.js';
+import { decide as wheelDecide } from './wheel-policy.js';
+import { decide as limboDecide } from './limbo-policy.js';
+import { decide as maxWinDecide } from './maxwin-policy.js';
+import { decide as towerDecide } from './dragon-tower-policy.js';
+import { decide as roadDecide } from './hubie-road-policy.js';
+import { decide as hiloDecide } from './hilo-policy.js';
+import { decide as blackjackDecide } from './blackjack-policy.js';
+
+Object.assign(dice, { decide: diceDecide });
+Object.assign(mines, { decide: minesDecide });
+Object.assign(plinko, { decide: plinkoDecide });
+Object.assign(keno, { decide: kenoDecide });
+Object.assign(wheel, { decide: wheelDecide });
+Object.assign(limbo, { decide: limboDecide });
+Object.assign(maxWin, { decide: maxWinDecide });
+Object.assign(dragonTower, { decide: towerDecide });
+Object.assign(hubieRoad, { decide: roadDecide });
+Object.assign(hilo, { decide: hiloDecide });
+Object.assign(blackjack, { decide: blackjackDecide });
 
 export const ALL = [
   dice,

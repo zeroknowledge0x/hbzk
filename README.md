@@ -72,6 +72,13 @@ npm test
 
 Offline unit tests. They do not need Chrome or a stream key.
 
+## Docs
+
+| Doc | What it records |
+| --- | --- |
+| [docs/per-game.md](docs/per-game.md) | Buttons measured on every House table, the policy file per table, how progress is observed |
+| [docs/table-variety.md](docs/table-variety.md) | Variety chips per table, quiet-talk timer, payout-vs-target rule |
+
 ## Layout
 
 ```

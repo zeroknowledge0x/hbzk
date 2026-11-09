@@ -57,3 +57,6 @@ data/chrome-profile/
 
 # Telegram bot state (owner chat id)
 data/telegram.json
+
+# Table rotation cursor (runtime position in the lobby, not source)
+data/rotation.json

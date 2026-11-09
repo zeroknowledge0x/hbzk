@@ -5,11 +5,11 @@
 
 import { byName } from './adapters/index.js';
 import { checkAction } from './safety.js';
-import { preferInRoundLabels, labelMatchesPlay } from './play-labels.js';
-import { varietyClicks, varietyPlay } from './variety.js';
+import { labelMatchesPlay } from './play-labels.js';
+import { kenoNumbers, readObservedProgress } from './progress.js';
 
 export class Controller {
-  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue }) {
+  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random }) {
     this.world = world;
     this.tools = tools;
     this.planner = planner;
@@ -28,6 +28,7 @@ export class Controller {
     this._completed = 0;
     this._demoAttempts = 0;
     this._lastShotTalk = 0;
+    this.random = typeof random === 'function' ? random : Math.random;
   }
 
   // ── public API ──────────────────────────────────────────────────────────────
@@ -399,75 +400,67 @@ export class Controller {
     const zero = await this._verifyZeroStake();
     if (!zero.ok) return zero;
     this._snapshot = this._captureSnapshot();
-    const gameName = this.world?.get?.()?.phase === 'playing'
-      ? this.world.get().game : (step.game || this.planner.status().goal?.game);
-    const adapter = byName(gameName);
-    if (adapter?.pick === 'tile' && typeof this.game?.clickMinesTile === 'function') {
-      const tile = await this.game.clickMinesTile();
-      if (tile?.ok) {
-        await this._snapPlay(tile.text || 'tile');
-        if (this.world?.get?.()?.phase === 'playing') return { ok: true, detail: tile };
-      }
-    }
-    if (adapter?.pick === 'number' && typeof this.game?.clickText === 'function') {
-      const spots = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 2 + Math.floor(Math.random() * 3));
-      for (const n of spots) {
-        if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
-        const spot = await this.game.clickText(String(n)).catch(() => null);
-        if (spot?.ok) {
-          await this._snapPlay(String(n));
-        }
-      }
-    }
     const worldState = this.world?.get?.() || {};
+    const gameName = worldState.phase === 'playing'
+      ? worldState.game : (step.game || this.planner.status().goal?.game);
+    const adapter = byName(gameName);
+    if (!adapter || typeof adapter.decide !== 'function') return { ok: false, error: 'no per-game policy' };
     const controls = Array.isArray(worldState.controls) ? worldState.controls : [];
-    const phase = worldState.phase;
-    if (!this.variety || this.variety.game !== gameName || (phase === 'idle' && this.variety.done)) {
-      this.variety = { game: gameName, chips: varietyClicks(gameName, controls), at: 0, done: false };
-    }
-    while (phase === 'idle' && this.variety.at < this.variety.chips.length && typeof this.game?.clickText === 'function') {
+    // Progress is read from the board that is actually on screen (revealed gems, cleared
+    // floors/lanes); the number of clicks is never used as proof.
+    const progress = readObservedProgress(gameName, { ...(worldState.report || {}), controls });
+    const choice = adapter.decide({ phase: worldState.phase, controls, progress }, this.random);
+    if (!choice) return { ok: false, error: 'no measured action' };
+    if (worldState.phase !== 'playing' && choice.settings && typeof this.game?.clickText === 'function') {
       if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
-      const chip = this.variety.chips[this.variety.at++];
-      const hit = await this.game.clickText(chip).catch(() => null);
-      if (hit?.ok) {
-        this.log(`controller: variety "${chip}"`);
-        await this._snapPlay(chip);
-      }
+      const setting = await this.game.clickText(choice.settings).catch(() => null);
+      if (!setting?.ok) return { ok: false, error: 'settings control not available' };
     }
-    if (phase === 'idle') this.variety.done = true;
-    const varied = varietyPlay(gameName, controls);
-    let labels = preferInRoundLabels(
-      [varied, ...(adapter?.startLabels || []), step.args?.label]
-        .filter(Boolean)
-        .filter((v, i, a) => a.findIndex((x) => String(x).toLowerCase() === String(v).toLowerCase()) === i),
-      { phase, controls },
-    );
-    if (controls.length) {
-      const present = labels.filter((label) =>
-        controls.some((c) => labelMatchesPlay(label, c)));
-      if (present.length) labels = present;
+    if (choice.pick === 'tile') {
+      if (typeof this.game?.clickMinesTile !== 'function') return { ok: false, error: 'no tile tool' };
+      const tile = await this.game.clickMinesTile();
+      if (!tile?.ok) return { ok: false, error: 'tile unavailable' };
+      await this._snapPlay(tile.text || 'tile');
+      if (!choice.label) return { ok: true, detail: tile };
     }
-    let last = { ok: false, error: 'no play control' };
-    for (const label of labels) {
-      if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
-      if (typeof this.game?.clickText === 'function') {
-        const raw = await this.game.clickText(label).catch(() => null);
-        if (raw?.ok) {
-          await this._snapPlay(raw.text || label);
-          return { ok: true, detail: raw };
+    if ((choice.pick === 'auto-or-numbers' || choice.pick === 'numbers') && typeof this.game?.clickText === 'function') {
+      const auto = choice.pick === 'auto-or-numbers' && this.random() < 0.5;
+      if (auto) {
+        const result = await this.game.clickText('Auto pick');
+        if (!result?.ok) return { ok: false, error: 'auto pick unavailable' };
+      } else {
+        const spots = kenoNumbers(controls);
+        for (let i = spots.length - 1; i > 0; i--) {
+          const j = Math.floor(this.random() * (i + 1));
+          [spots[i], spots[j]] = [spots[j], spots[i]];
         }
-        last = { ok: false, error: raw?.error || 'not found' };
-        continue;
-      }
-      last = await this.tools.run('click', { label });
-      if (last?.ok) {
-        await this._snapPlay(last.text || label);
-        return last;
+        let picked = 0;
+        for (const n of spots.slice(0, 2 + Math.floor(this.random() * 3))) {
+          if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
+          const spot = await this.game.clickText(String(n)).catch(() => null);
+          if (spot?.ok) picked++;
+        }
+        if (!picked) return { ok: false, error: 'no Keno numbers selected' };
       }
     }
-    return last;
+    let currentControls = controls;
+    if (choice.pick && choice.label && !controls.some((c) => labelMatchesPlay(choice.label, c))
+      && typeof this.game?.getUiSnapshot === 'function') {
+      const snap = await this.game.getUiSnapshot({ force: true });
+      currentControls = (snap?.clickables || []).map((item) => String(item?.text || '').trim());
+    }
+    const label = choice.label;
+    if (!label || !currentControls.some((c) => labelMatchesPlay(label, c))) return { ok: false, error: 'no visible play control' };
+    if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
+    if (typeof this.game?.clickText === 'function') {
+      const raw = await this.game.clickText(label).catch(() => null);
+      if (!raw?.ok) return { ok: false, error: raw?.error || 'not found' };
+      await this._snapPlay(raw.text || label);
+      return { ok: true, detail: raw };
+    }
+    const raw = await this.tools.run('click', { label });
+    if (raw?.ok) await this._snapPlay(raw.text || label);
+    return raw;
   }
 
   async _snapPlay(tag) {
