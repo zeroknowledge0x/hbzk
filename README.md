@@ -72,13 +72,29 @@ npm test
 
 Offline unit tests. They do not need Chrome or a stream key.
 
-## Docs
+## How the host plays (demo stake 0)
 
-| Doc | What it records |
-| --- | --- |
-| [docs/per-game.md](docs/per-game.md) | Buttons measured on every House table, the policy file per table, how progress is observed |
-| [docs/table-variety.md](docs/table-variety.md) | Variety chips per table, quiet-talk timer, payout-vs-target rule |
-| [docs/runtime.md](docs/runtime.md) | Why a restart must not re-download ffmpeg, and what a spent LLM quota looks like in the log |
+One measured policy per House table (`src/core/adapters/*-policy.js`); the controller asks it
+for a single action and verifies that action on the live page before clicking it. Progress is
+read from the board (revealed gems, cleared floors/lanes), never from a click count.
+
+| Table | Idle | In a round | Cash out |
+| --- | --- | --- | --- |
+| Dice | range chip or a written multiplier (1.5x-10x), then `Bet` | one roll resolves | — |
+| Mines | `Bet` | `Random tile` or one unrevealed tile | after a reveal, at most 40% of the decisions |
+| Plinko | risk chip, then `Bet` | — | — |
+| Keno | risk chip, `Clear table`, 2-4 numbers or `Auto pick`, then `Bet` | — | — |
+| Wheel | risk chip, then `Bet` | — | — |
+| Limbo | target preset (1.5x/5x/10x/100x), then `Bet` | — | — |
+| Max Win | written multiplier (10x-1000x), then `Bet` | — | — |
+| Dragon Tower | `Bet` | `Random pick` or a floor tile | after one floor, at most 40% |
+| Hilo | `Bet` to deal | `Higher / same` or `Lower / same` | `Cash out` when no climb is offered |
+| Blackjack | `Bet`/`Deal`, `No thanks` for insurance | `Hit` or `Stand` | — |
+| Hubie's Road | `Bet` or `Go` | next lane | after one lane, at most 40% |
+
+A round is `enter_game` (lobby card click, never `page.goto`) → `start_round` → `await_result`.
+Rounds are 6-15 s apart, the table changes every 10-60 min, and a game a viewer asks for in
+chat jumps the queue.
 
 ## Layout
 
