@@ -158,17 +158,17 @@ export class Brain {
         },
         {
           role: 'user',
-          content: `TABLE ${game || 'unknown'} phase=${phase || 'unknown'} progress=${Number(progress) || 0}${note ? `\nON SCREEN: ${note}` : ''}\nCONTROLS:\n${offered.map((label, i) => `${i + 1}. ${label}`).join('\n')}`,
+          content: `TABLE ${game || 'unknown'} phase=${phase || 'unknown'} progress=${Number(progress) || 0}${note ? `\nON SCREEN: ${note}` : ''}\nCONTROLS:\n${offered.map((label, i) => `${i + 1}. ${label}`).join('\n')}\nLast line only: one label copied from the list, or none.`,
         },
-      ], { maxTokens: 40, temperature: 0.4, timeoutMs: 8000 });
+      ], { maxTokens: 300, temperature: 0.2, timeoutMs: 15000, joinReasoning: true });
     } catch (err) {
       log(`brain: look skipped (${err?.message || err})`);
       return null;
     }
-    return String(text || '').split('\n')[0].replace(/^\d+[).\s]+/, '').replace(/^["'`]+|["'`]+$/g, '').trim() || null;
+    return String(text || '').trim() || null;
   }
 
-  async #chat(messages, { maxTokens = 220, temperature = 0.9, timeoutMs = 20000 } = {}) {
+  async #chat(messages, { maxTokens = 220, temperature = 0.9, timeoutMs = 20000, joinReasoning = false } = {}) {
     const ms = Number(timeoutMs) > 0 ? Number(timeoutMs) : 20000;
     // Try the configured provider, then any provider the chain says is not in cooldown. A
     // spent quota on one plan must not mute the host when a second key is configured.
@@ -212,9 +212,12 @@ export class Brain {
       let data = null;
       try { data = JSON.parse(text); } catch { data = null; }
       const msg = data?.choices?.[0]?.message || {};
-      const out = [msg.content, msg.reasoning_content, data?.choices?.[0]?.text, data?.output_text]
-        .map((part) => (typeof part === 'string' ? part.trim() : ''))
-        .find(Boolean) || '';
+      const content = typeof msg.content === 'string' ? msg.content.trim() : '';
+      const reason = typeof msg.reasoning_content === 'string' ? msg.reasoning_content.trim() : '';
+      const extra = [data?.choices?.[0]?.text, data?.output_text].map((part) => (typeof part === 'string' ? part.trim() : '')).find(Boolean) || '';
+      const out = joinReasoning
+        ? [content, reason, extra].filter(Boolean).join('\n')
+        : (content || reason || extra);
       if (out) return out;
       lastErr = new Error('LLM returned an empty choice');
     }

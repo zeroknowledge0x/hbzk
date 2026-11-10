@@ -498,7 +498,7 @@ export class Controller {
       if (!label) {
         this._emptyLooks = (this._emptyLooks || 0) + 1;
         if (this._emptyLooks < 12) {
-          this.log(`controller: model chose nothing clickable (${String(named || 'empty').slice(0, 80)}), waiting`);
+          this.log(`controller: model chose nothing clickable (${String(named || 'empty').slice(0, 80)}; board ${live.slice(0, 6).join(' | ')}), waiting`);
           return { ok: false, deferred: true, error: 'model did not choose a visible control' };
         }
         this.log(`controller: model chose nothing clickable (${named || 'empty'})`);
