@@ -9,9 +9,10 @@ import { labelMatchesPlay } from './play-labels.js';
 import { kenoNumbers, readObservedProgress } from './progress.js';
 import { cashoutLine } from './play-talk.js';
 import { createScratch, exhausted, noteFailure, noteSuccess, openTask } from './reflexion.js';
+import { compressControls, legalControls, resolveLookedClick } from './look-then-click.js';
 
 export class Controller {
-  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random, now, advise, notifyAction }) {
+  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random, now, advise, notifyAction, look }) {
     this.world = world;
     this.tools = tools;
     this.planner = planner;
@@ -35,6 +36,8 @@ export class Controller {
     // Playbook advice (verified lessons) and the drift watch's action tap.
     this.advise = typeof advise === 'function' ? advise : null;
     this.notifyAction = typeof notifyAction === 'function' ? notifyAction : null;
+    // When set, the model looks at the table and names the click. The policy is not a fallback.
+    this.look = typeof look === 'function' ? look : null;
     this.scratch = createScratch();
     // Breathing room between rounds. Without it a table whose "round" is one click (Hilo
     // skip, Dice bet) replans the instant it finishes and looks like a click bot.
@@ -446,7 +449,36 @@ export class Controller {
     // Progress is read from the board that is actually on screen (revealed gems, cleared
     // floors/lanes); the number of clicks is never used as proof.
     const progress = readObservedProgress(gameName, { ...(worldState.report || {}), controls });
-    const choice = adapter.decide({ phase: worldState.phase, controls, progress }, this.random);
+    // Every table: the model sees the controls (compressed when the board is long) and names
+    // one. A silent or illegal answer is a no-click. The measured policy is not a fallback,
+    // because a random Hit/Stand/chip is what made the host play without looking.
+    let choice;
+    if (this.look) {
+      let live = controls;
+      if (typeof this.game?.getUiSnapshot === 'function') {
+        const snap = await this.game.getUiSnapshot({ force: true }).catch(() => null);
+        const fresh = (snap?.clickables || []).map((item) => String(item?.text || '').trim()).filter(Boolean);
+        if (fresh.length) live = fresh;
+      }
+      const offered = compressControls(legalControls(live));
+      let pick = null;
+      try {
+        pick = await this.look({ game: gameName, phase: worldState.phase, controls: offered, progress });
+      } catch (err) {
+        this.log(`controller: look failed (${err?.message || err})`);
+        return { ok: false, error: 'look failed' };
+      }
+      const named = typeof pick === 'object' && pick ? pick.label : pick;
+      const label = resolveLookedClick({ controls: live, pick: named });
+      if (!label) {
+        this.log(`controller: model chose nothing clickable (${named || 'empty'})`);
+        return { ok: false, error: 'model did not choose a visible control' };
+      }
+      choice = { label };
+    } else {
+      if (!adapter || typeof adapter.decide !== 'function') return { ok: false, error: 'no per-game policy' };
+      choice = adapter.decide({ phase: worldState.phase, controls, progress }, this.random);
+    }
     if (!choice) return { ok: false, error: 'no measured action' };
     // A table with a writable payout field gets a random target on the way in. Best effort:
     // the setter verifies its own readback, and a table that cannot write it still plays.

@@ -186,6 +186,7 @@ export class GameFeed {
         const inGame = /\/games\/housegames-/.test(location.href);
         const NAV_CHROME = /^(toggle menu|rewards|search|chat|log ?in|register|casino|sports|casino lobby|house games|new releases|slots|live casino|house studios|game shows|blackjack|roulette|baccarat|providers|promotions|leaderboard|xp race|contest labs|affiliate|blog|help center|responsible gambling|live support|fair|rules|theatre mode|open mini player|normal|sound|settings|show more|scroll previous|scroll next|pure speed|account|wallet|weekly prize[^|]*|monthly prize[^|]*)$/i;
         const priority = [];
+        const dialogs = [];
         const tiles = [];
         const rest = [];
         const seen = new Set();
@@ -220,7 +221,18 @@ export class GameFeed {
             && BET_FIELD.test(`${text} ${el.getAttribute('name') || ''} ${el.getAttribute('id') || ''}`);
           const isControl = !isBetField
             && (CONTROL.test(inner) || CONTROL.test(norm(el.getAttribute('aria-label'))));
-          if (tileish) tiles.push(entry);
+          const inDialog = (() => {
+            for (let n = el; n; n = n.parentElement || n.getRootNode?.().host) {
+              const role = String(n.getAttribute?.('role') || '').toLowerCase();
+              if (role === 'dialog' || role === 'alertdialog') return true;
+              const cls = String(n.className || '').toLowerCase();
+              if (cls.includes('modal') || cls.includes('dialog')) return true;
+            }
+            return false;
+          })();
+          const dialogLabel = /hit anyway|^cancel$|don't ask|dont ask|^close$|^no thanks$/i.test(text);
+          if (inDialog || dialogLabel) dialogs.push(entry);
+          else if (tileish) tiles.push(entry);
           else (isControl || isBetField ? priority : rest).push(entry);
         }
         // Dice outcome sensor: the latest result marker lives inside the shadow DOM.
@@ -331,7 +343,7 @@ export class GameFeed {
             }
           } catch { /* no generic marker on this table */ }
         }
-        return { bodySnippet, title: document.title, clickables: [...priority, ...tiles, ...rest].slice(0, max), outcome };
+        return { bodySnippet, title: document.title, clickables: [...dialogs, ...priority, ...tiles, ...rest].slice(0, max), outcome };
       }, UI_MAX, process.env.HOUSEBETS_HANDLE || '');
       if (snap) {
         let outcome = snap.outcome && !['generic', 'handle-row', 'live-bets'].includes(snap.outcome.source) ? snap.outcome : null;

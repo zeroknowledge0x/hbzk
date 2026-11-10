@@ -545,6 +545,8 @@ const rotation = new Rotation({file:path.join(process.cwd(),'data','rotation.jso
   playable:allowed,intervalMs:quietIntervalMs()});
 rotation.playNow();
 const controller = new Controller({world,tools:coreTools,planner,verifier,game,rotation,playable:allowed,log,playQueue,
+  // The model looks at the compressed control list and names the click. No policy fallback.
+  look: (view) => brain.chooseClick(view),
   // Only verified rounds reach the playbook; the controller only reads its advice.
   advise: (table, info) => advise(playbook, table, info),
   notifyAction: (label) => { driftWatch = noteAction(driftWatch, { action: label }); },

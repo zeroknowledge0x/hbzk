@@ -142,6 +142,32 @@ export class Brain {
     return parts.join('\n\n');
   }
 
+  // The click, for every table. The model sees the compressed control list and names one.
+  // A miss, a refusal, or a dead provider is null — the caller must not click at random.
+  async chooseClick({ game, phase, controls, progress } = {}) {
+    if (this.offline) return null;
+    const offered = Array.isArray(controls) ? controls.filter(Boolean) : [];
+    if (!offered.length) return null;
+    const { pickFromReply } = await import('./core/look-then-click.js');
+    let text = '';
+    try {
+      text = await this.#chat([
+        {
+          role: 'system',
+          content: 'You are looking at a Housebets demo table. Stake is locked at 0 by code. You have no script for this game. Read the controls and reply with the ONE next click, copied exactly from the list, or none. Never invent a label. Never pick a wallet, stake, or amount control.',
+        },
+        {
+          role: 'user',
+          content: `TABLE ${game || 'unknown'} phase=${phase || 'unknown'} progress=${Number(progress) || 0}\nCONTROLS:\n${offered.map((label, i) => `${i + 1}. ${label}`).join('\n')}`,
+        },
+      ], { maxTokens: 40, temperature: 0.4, timeoutMs: 8000 });
+    } catch (err) {
+      log(`brain: look skipped (${err?.message || err})`);
+      return null;
+    }
+    return pickFromReply(text, offered);
+  }
+
   async #chat(messages, { maxTokens = 220, temperature = 0.9, timeoutMs = 20000 } = {}) {
     const ms = Number(timeoutMs) > 0 ? Number(timeoutMs) : 20000;
     // Try the configured provider, then any provider the chain says is not in cooldown. A
@@ -186,7 +212,9 @@ export class Brain {
       let data = null;
       try { data = JSON.parse(text); } catch { data = null; }
       const msg = data?.choices?.[0]?.message || {};
-      const out = (msg.content || msg.reasoning_content || '').trim();
+      const out = [msg.content, msg.reasoning_content, data?.choices?.[0]?.text, data?.output_text]
+        .map((part) => (typeof part === 'string' ? part.trim() : ''))
+        .find(Boolean) || '';
       if (out) return out;
       lastErr = new Error('LLM returned an empty choice');
     }

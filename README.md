@@ -110,6 +110,7 @@ chat jumps the queue.
 | `src/core/latency.js` | Mouth latency budget (`p50`/`p95`, slowest stage named) and the short cover line that prevents dead air when the brain is slow |
 | `src/core/drift.js` | Drift watch: stuck click loops, encoder frame-time drift and capture stalls become an alert the next tick reacts to |
 | `scripts/logic-audit.mjs` | Sweeps all eleven tables × phases × control shapes (1,320 policy cases + 69 controller steps) and fails on a dead end, an off-table label, a mid-round setting write or a click without a verified zero stake |
+| `src/core/look-then-click.js` | The click, on every table, is the label the model names after it sees the controls. A long board is compressed. A silent or illegal answer is a no-click — the measured policy is not a fallback |
 | `clickText` actionability | A click fails loudly when the target is covered, off-screen or moving, and scrolls a below-the-fold target into view first |
 
 ## Layout
