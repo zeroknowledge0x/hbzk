@@ -1634,7 +1634,7 @@ export class GameFeed {
             if (/\b(info|history|rules|fair|help|amount|halve|double|wallet)\b/.test(text)) return false;
             // The snapshot glues innerText and aria into one long label. The button is the short one.
             // Four letters is not enough: "Auto pick…" must not hit the Auto mode toggle.
-            if (q.startsWith(text) && text.length >= 8 && !/^(manual|auto)$/.test(text)) return true;
+            if (text.length >= 6 && q.includes(text) && !/^(manual|auto)$/.test(text)) return true;
 
             if (!text.startsWith(q)) return false;
             const rest = text.slice(q.length).trim();
@@ -1644,7 +1644,7 @@ export class GameFeed {
           };
           if (!matches(want, label)) continue;
           let score = low === q ? 100 : 80;
-          if (q.startsWith(low) && low !== q) score = 40 + Math.min(low.length, 40);
+          if (q.includes(low) && low !== q) score = 40 + Math.min(low.length, 40);
           if (el.tagName.toLowerCase() === 'a') score += 5;
           if (href && href.toLowerCase().includes(q.replace(/\s+/g, ''))) score += 15;
           score += Math.max(0, 12 - label.length); // shorter title wins ties
