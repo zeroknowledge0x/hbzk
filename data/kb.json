@@ -1,22 +1,182 @@
 {
   "entries": [
-    {"id": "what", "title": "What Housebets is", "tags": ["housebets", "casino", "crypto", "sportsbook"], "text": "Housebets is a crypto casino and sportsbook at housebets.com. Provably fair House Games, slots from other providers, live casino, and sports betting. 24/7 support."},
-    {"id": "originals", "title": "House Games list", "tags": ["originals", "house games", "dice", "mines"], "text": "House Games are made by Housebets: Dice, Mines, Plinko, Keno, Wheel, Limbo, Max Win, Dragon Tower, Hilo, Blackjack, and Hubie's Road. Chat crash maps to Limbo. There is no Crash lobby card."},
-    {"id": "fair", "title": "Provably fair", "tags": ["fair", "rtp", "seeds", "provably"], "text": "House Games are provably fair. Each result can be checked with the seeds shown in the game. Third-party games use licensed providers with certified RNG and published RTP. Hilo's table shows RTP 99.00%."},
-    {"id": "stream", "title": "This stream", "tags": ["demo", "kick", "hubie", "promo"], "text": "This Kick stream promotes Housebets House Games. Stake is locked at 0 by the host. It is a demo show, not a deposit pitch. 18 plus. Gamble responsibly."},
-    {"id": "dice", "title": "Dice", "tags": ["dice", "over", "under"], "text": "Dice: set a target, then Bet. Over and Under are mode chips, not the play button. This stream bets 0."},
-    {"id": "mines", "title": "Mines", "tags": ["mines", "tile"], "text": "Mines: Bet, then pick tiles. A mine ends the round. Random pick exists on some boards. Stake stays 0 on this stream."},
-    {"id": "keno", "title": "Keno", "tags": ["keno", "auto pick"], "text": "Keno: Classic, Low, Medium, High are risk chips. Pick numbers or Auto pick, then Bet. It is not Hilo Higher or Lower."},
-    {"id": "hilo", "title": "Hilo", "tags": ["hilo", "higher", "lower", "kabar"], "text": "Hilo has no Bet button. Play is Higher or same, Lower or same, or Skip card. Cash out at $0.00 does nothing. The table shows RTP 99.00%."},
-    {"id": "website", "title": "Website", "tags": ["website", "site", "url", "link", "housebets"], "text": "The website is https://www.housebets.com. House Games live under Casino, House Games. This stream does not take deposits."},
-    {"id": "kabar", "title": "How are you", "tags": ["kabar", "how are you", "hello"], "text": "Hubie is fine. The stream is a demo. Stake is locked at zero. Answer how-are-you and apa kabar in English."},
-    {"id": "blackjack", "title": "Blackjack", "tags": ["blackjack", "hit", "stand"], "text": "Blackjack: Bet first. Hit and Stand appear after the deal. Boxes 1, 2, 3 are table options, not a second game."},
-    {"id": "tower", "title": "Dragon Tower", "tags": ["dragon tower", "random pick", "cash out"], "text": "Dragon Tower: Bet, then climb with tiles or Random pick. Cash out only after a climb, not as the first click."},
-    {"id": "road", "title": "Hubie's Road", "tags": ["hubie road", "go"], "text": "Hubie's Road is a House Game. Start with GO or Bet. The lobby card is under House Games, not always on the top grid."},
-    {"id": "limbo", "title": "Limbo", "tags": ["limbo", "target"], "text": "Limbo: set a target multiplier, then Bet. Chat asking for crash is played as Limbo."},
-    {"id": "plinko", "title": "Plinko", "tags": ["plinko"], "text": "Plinko: drop a ball through pegs. Bet starts the drop. Risk chips change the board, they are not the play button."},
-    {"id": "wheel", "title": "Wheel", "tags": ["wheel", "spin"], "text": "Wheel: Bet or Spin the Housebets wheel. Segments pay by the printed multipliers. This stream stays at stake 0."},
-    {"id": "maxwin", "title": "Max Win", "tags": ["max win"], "text": "Max Win is a House Game. Bet starts the round. Do not invent a jackpot number that is not on screen."},
-    {"id": "chat", "title": "Chat requests", "tags": ["chat", "switch", "ganti"], "text": "One viewer asking for a House Game switches now. Several requests play in order, a few minutes each. Say the name and the game. Do not say queued."}
+    {
+      "id": "what",
+      "title": "What Housebets is",
+      "tags": [
+        "housebets",
+        "casino",
+        "crypto",
+        "sportsbook"
+      ],
+      "text": "Housebets is a crypto casino and sportsbook at housebets.com. Provably fair House Games, slots from other providers, live casino, and sports betting. 24/7 support."
+    },
+    {
+      "id": "originals",
+      "title": "House Games list",
+      "tags": [
+        "originals",
+        "house games",
+        "dice",
+        "mines"
+      ],
+      "text": "House Games are made by Housebets: Dice, Mines, Plinko, Keno, Wheel, Limbo, Max Win, Dragon Tower, Hilo, Blackjack, and Hubie's Road. Chat crash maps to Limbo. There is no Crash lobby card."
+    },
+    {
+      "id": "fair",
+      "title": "Provably fair",
+      "tags": [
+        "fair",
+        "rtp",
+        "seeds",
+        "provably"
+      ],
+      "text": "House Games are provably fair. Each result can be checked with the seeds shown in the game. Third-party games use licensed providers with certified RNG and published RTP."
+    },
+    {
+      "id": "stream",
+      "title": "This stream",
+      "tags": [
+        "demo",
+        "kick",
+        "hubie",
+        "promo"
+      ],
+      "text": "This Kick stream promotes Housebets House Games. Stake is locked at 0 by the host. It is a demo show, not a deposit pitch. 18 plus. Gamble responsibly."
+    },
+    {
+      "id": "dice",
+      "title": "Dice",
+      "tags": [
+        "dice",
+        "over",
+        "under"
+      ],
+      "text": "Dice: set a target, then Bet. Over and Under are mode chips, not the play button. This stream bets 0."
+    },
+    {
+      "id": "mines",
+      "title": "Mines",
+      "tags": [
+        "mines",
+        "tile"
+      ],
+      "text": "Mines: Bet, then pick tiles. A mine ends the round. Random pick exists on some boards. Stake stays 0 on this stream."
+    },
+    {
+      "id": "keno",
+      "title": "Keno",
+      "tags": [
+        "keno",
+        "auto pick"
+      ],
+      "text": "Keno: Classic, Low, Medium, High are risk chips. Pick numbers or Auto pick, then Bet. It is not Hilo Higher or Lower."
+    },
+    {
+      "id": "hilo",
+      "title": "Hilo",
+      "tags": [
+        "hilo",
+        "higher",
+        "lower",
+        "kabar"
+      ],
+      "text": "Hilo: Bet deals the first card. Then Higher or same, or Lower or same. Cash out takes the demo; Skip card only when no climb is offered. Stake stays 0."
+    },
+    {
+      "id": "website",
+      "title": "Website",
+      "tags": [
+        "website",
+        "site",
+        "url",
+        "link",
+        "housebets"
+      ],
+      "text": "The website is https://www.housebets.com. House Games live under Casino, House Games. This stream does not take deposits."
+    },
+    {
+      "id": "kabar",
+      "title": "How are you",
+      "tags": [
+        "kabar",
+        "how are you",
+        "hello"
+      ],
+      "text": "Hubie is fine. The stream is a demo. Stake is locked at zero. Answer how-are-you and apa kabar in English."
+    },
+    {
+      "id": "blackjack",
+      "title": "Blackjack",
+      "tags": [
+        "blackjack",
+        "hit",
+        "stand"
+      ],
+      "text": "Blackjack: Bet first. Hit and Stand appear after the deal. Boxes 1, 2, 3 are table options, not a second game."
+    },
+    {
+      "id": "tower",
+      "title": "Dragon Tower",
+      "tags": [
+        "dragon tower",
+        "random pick",
+        "cash out"
+      ],
+      "text": "Dragon Tower: Bet, then climb with tiles or Random pick. Cash out only after a climb, not as the first click."
+    },
+    {
+      "id": "road",
+      "title": "Hubie's Road",
+      "tags": [
+        "hubie road",
+        "go"
+      ],
+      "text": "Hubie's Road is a House Game. Start with GO or Bet. The lobby card is under House Games, not always on the top grid."
+    },
+    {
+      "id": "limbo",
+      "title": "Limbo",
+      "tags": [
+        "limbo",
+        "target"
+      ],
+      "text": "Limbo: set a target multiplier, then Bet. Chat asking for crash is played as Limbo."
+    },
+    {
+      "id": "plinko",
+      "title": "Plinko",
+      "tags": [
+        "plinko"
+      ],
+      "text": "Plinko: drop a ball through pegs. Bet starts the drop. Risk chips change the board, they are not the play button."
+    },
+    {
+      "id": "wheel",
+      "title": "Wheel",
+      "tags": [
+        "wheel",
+        "spin"
+      ],
+      "text": "Wheel: Bet or Spin the Housebets wheel. Segments pay by the printed multipliers. This stream stays at stake 0."
+    },
+    {
+      "id": "maxwin",
+      "title": "Max Win",
+      "tags": [
+        "max win"
+      ],
+      "text": "Max Win is a House Game. Bet starts the round. Do not invent a jackpot number that is not on screen."
+    },
+    {
+      "id": "chat",
+      "title": "Chat requests",
+      "tags": [
+        "chat",
+        "switch",
+        "ganti"
+      ],
+      "text": "One viewer asking for a House Game switches now. Several requests play in order, a few minutes each. Say the name and the game. Do not say queued."
+    }
   ]
 }
