@@ -185,6 +185,8 @@ export class GameFeed {
         // in — that is why "the game opens but never plays" looked like a Dice-only bug.
         const inGame = /\/games\/housegames-/.test(location.href);
         const NAV_CHROME = /^(toggle menu|rewards|search|chat|log ?in|register|casino|sports|casino lobby|house games|new releases|slots|live casino|house studios|game shows|blackjack|roulette|baccarat|providers|promotions|leaderboard|xp race|contest labs|affiliate|blog|help center|responsible gambling|live support|fair|rules|theatre mode|open mini player|normal|sound|settings|show more|scroll previous|scroll next|pure speed|account|wallet|weekly prize[^|]*|monthly prize[^|]*)$/i;
+        // These sit in the same snapshot and used to fill the 40 slots before Higher/Lower/Skip.
+        const SNAP_SKIP = /^(manual|auto)$|\bfavourites?\b|\bfavorites?\b|recently played|^bet amount\b|^idr\b|^usd\b|^eur\b|^pol\b|currencies/i;
         const priority = [];
         const dialogs = [];
         const tiles = [];
@@ -203,7 +205,7 @@ export class GameFeed {
           if (text) { const w = text.split(' '); text = w.filter((x, k) => k === 0 || x.toLowerCase() !== w[k - 1].toLowerCase()).join(' '); }
           const tileish = isMines && mineTile(el, tag, r);
           if (!text && !tileish) continue;
-          if (inGame && !tileish && NAV_CHROME.test(text)) continue;
+          if (inGame && !tileish && (NAV_CHROME.test(text) || SNAP_SKIP.test(text))) continue;
           const key = `${text}@${Math.round(r.x)},${Math.round(r.y)}`;
           if (seen.has(key)) continue;
           seen.add(key);
@@ -219,6 +221,7 @@ export class GameFeed {
           if (tileish) entry.tile = true;
           const isBetField = tag === 'input'
             && BET_FIELD.test(`${text} ${el.getAttribute('name') || ''} ${el.getAttribute('id') || ''}`);
+          if (inGame && isBetField) continue;
           const isControl = !isBetField
             && (CONTROL.test(inner) || CONTROL.test(norm(el.getAttribute('aria-label'))));
           const inDialog = (() => {

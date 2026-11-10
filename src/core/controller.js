@@ -573,7 +573,10 @@ export class Controller {
     if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
     if (typeof this.game?.clickText === 'function') {
       const raw = await this.game.clickText(label).catch(() => null);
-      if (!raw?.ok) return { ok: false, error: raw?.error || 'not found' };
+      if (!raw?.ok) {
+        this.log(`controller: click "${label}" missed (${raw?.error || 'not found'})`);
+        return { ok: false, error: raw?.error || 'not found' };
+      }
       await this._snapPlay(raw.text || label);
       if (/^cash out/i.test(String(label))) {
         // Say why the round was taken off the table: a click with a reason reads as a host.

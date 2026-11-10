@@ -59,11 +59,13 @@ export function pickFromReply(reply, controls = []) {
   const line = text.split('\n')[0].replace(/^\d+[).\s]+/, '').replace(/^["'`]+|["'`]+$/g, '').trim();
   const direct = resolveLookedClick({ controls, pick: line });
   if (direct) return direct;
-  const low = text.toLowerCase();
   const named = legalControls(controls)
     .filter((label) => !label.startsWith('…'))
     .sort((a, b) => b.length - a.length)
-    .find((label) => low.includes(label.toLowerCase()));
+    .find((label) => {
+      const needle = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`(?:^|[^a-z0-9])${needle}(?:[^a-z0-9]|$)`, 'i').test(text);
+    });
   return named ? resolveLookedClick({ controls, pick: named }) : null;
 }
 
