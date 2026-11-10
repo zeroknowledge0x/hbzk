@@ -6,7 +6,7 @@ import { labelMatchesPlay } from './play-labels.js';
 const NEVER = /\b(info|history|rules|fair|help|amount|halve|double|wallet)\b/i;
 // Page chrome that sits in the same snapshot as the table. "Cash" alone would also hide
 // "Cash out", so the money rows are matched from the start of the label.
-const CHROME = /\b(account|search|weekly prize|favourite|favorite|recently played|currencies)\b/i;
+const CHROME = /\b(account|search|weekly prize|favourites?|favorites?|recently played|currencies)\b/i;
 const MONEY = /^(idr|usd|eur|pol|bnb|usdt|usdc|sol|eth)\b/i;
 // Manual/Auto only switch the bet mode. Clicking them in a loop is not playing.
 const MODE = /^(manual|auto)$/i;
