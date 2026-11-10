@@ -9,7 +9,7 @@ import { labelMatchesPlay } from './play-labels.js';
 import { kenoNumbers, readObservedProgress } from './progress.js';
 import { cashoutLine } from './play-talk.js';
 import { createScratch, exhausted, noteFailure, noteSuccess, openTask } from './reflexion.js';
-import { compressControls, legalControls, resolveLookedClick } from './look-then-click.js';
+import { compressControls, legalControls, resolveLookedClick, withBudget } from './look-then-click.js';
 
 export class Controller {
   constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random, now, advise, notifyAction, look }) {
@@ -428,14 +428,23 @@ export class Controller {
     if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
     if (typeof this.game?.setStake !== 'function') return { ok: false, error: 'No verified stake control' };
     try {
-      const r = await this.game.setStake(0);
+      const r = await withBudget(this.game.setStake(0), 8000, 'setStake');
       if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
       if (r?.ok === true && r.verified === true && r.observed === 0
-        && (r.settings?.stake === undefined || r.settings.stake === 0)) return r;
-      // The field is not in the DOM yet on a table that just opened. Waiting is not a
-      // failed round — failing it is what killed the goal two seconds after every switch.
-      if (r?.pending || (r && r.ok !== true && /no stake control|not ready/i.test(String(r.error || '')))) {
-        return { ok: false, deferred: true, error: r.error };
+        && (r.settings?.stake === undefined || r.settings.stake === 0)) {
+        this._stakeWaits = 0;
+        return r;
+      }
+      // The field is not in the DOM yet on a table that just opened. Wait, but not forever:
+      // a hung read used to freeze the click loop with no log at all.
+      if (r?.pending || (r && r.ok !== true && /no stake control|not ready|timed out/i.test(String(r.error || '')))) {
+        this._stakeWaits = (this._stakeWaits || 0) + 1;
+        if (this._stakeWaits < 6) {
+          this.log(`controller: stake not ready (${r.error}), waiting`);
+          return { ok: false, deferred: true, error: r.error };
+        }
+        this._stakeWaits = 0;
+        return { ok: false, error: r.error || 'stake field never appeared' };
       }
       return { ok: false, error: r?.error || 'Zero stake readback mismatch' };
     } catch (err) { return { ok: false, error: err.message }; }
@@ -462,7 +471,7 @@ export class Controller {
       let live = controls;
       let seen = '';
       if (typeof this.game?.getUiSnapshot === 'function') {
-        const snap = await this.game.getUiSnapshot({ force: true }).catch(() => null);
+        const snap = await withBudget(this.game.getUiSnapshot({ force: true }), 8000, 'snapshot').catch(() => null);
         const fresh = (snap?.clickables || []).map((item) => String(item?.text || '').trim()).filter(Boolean);
         if (fresh.length) live = fresh;
         seen = String(snap?.dialogText || '').slice(0, 240);

@@ -64,3 +64,19 @@ export function pickFromReply(reply, controls = []) {
     .find((label) => low.includes(label.toLowerCase()));
   return named ? resolveLookedClick({ controls, pick: named }) : null;
 }
+
+// A page.evaluate that never returns used to freeze the whole click loop. The caller
+// gets a pending result instead, and can try again.
+export function withBudget(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve({ ok: false, pending: true, error: `${label} timed out` }), ms);
+  });
+  return Promise.race([
+    Promise.resolve(promise).then(
+      (value) => value,
+      (err) => ({ ok: false, error: err?.message || String(err) }),
+    ),
+    timeout,
+  ]).finally(() => clearTimeout(timer));
+}

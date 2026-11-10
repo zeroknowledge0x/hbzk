@@ -4,7 +4,7 @@ import test from 'node:test';
 import { Controller } from '../src/core/controller.js';
 import { Planner } from '../src/core/planner.js';
 import { World } from '../src/core/world.js';
-import { pickFromReply, compressControls, legalControls, resolveLookedClick } from '../src/core/look-then-click.js';
+import { pickFromReply, compressControls, legalControls, resolveLookedClick, withBudget } from '../src/core/look-then-click.js';
 test('a missing stake field waits, a non-zero readback does not', async () => {
   const world = new World({ game: 'Dice', phase: 'idle', controls: ['Bet'], stake: 0 });
   const planner = new Planner({ world });
@@ -37,6 +37,12 @@ test('an empty table waits instead of failing the round', async () => {
   const result = await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
   assert.equal(result.deferred, true);
   assert.equal(calls.filter((x) => typeof x === 'string').length, 0);
+});
+
+test('a hung page read expires instead of freezing the click loop', async () => {
+  const out = await withBudget(new Promise(() => {}), 40, 'setStake');
+  assert.equal(out.pending, true);
+  assert.match(out.error, /timed out/);
 });
 
 test('a sentence still resolves to the control it named, and Hit anyway beats Hit', () => {
