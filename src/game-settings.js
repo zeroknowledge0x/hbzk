@@ -20,8 +20,11 @@ export function inspectSettings(operation={}) {
     const e=fields[operation.kind];
     if(!e)return {ok:false,error:`No ${operation.kind} control on this table`};
     if(e.disabled||e.readOnly){
-      if(String(e.value).trim()!==''&&Number(e.value)===operation.value)return {ok:true,unchanged:true};
-      return {ok:false,error:`${operation.kind} control is locked`};
+      const current=String(e.value).trim();
+      if(current!==''&&Number(current)===operation.value)return {ok:true,unchanged:true};
+      // Empty while the table is still painting. A real non-zero lock is a hard stop.
+      if(current===''||!Number.isFinite(Number(current)))return {ok:false,pending:true,error:`${operation.kind} control is not ready`};
+      return {ok:false,error:`${operation.kind} control is locked at ${current}`};
     }
     const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;
     if(setter)setter.call(e,String(operation.value));else e.value=String(operation.value);

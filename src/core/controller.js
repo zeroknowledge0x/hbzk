@@ -434,7 +434,7 @@ export class Controller {
         && (r.settings?.stake === undefined || r.settings.stake === 0)) return r;
       // The field is not in the DOM yet on a table that just opened. Waiting is not a
       // failed round — failing it is what killed the goal two seconds after every switch.
-      if (r && r.ok !== true && /no stake control/i.test(String(r.error || ''))) {
+      if (r?.pending || (r && r.ok !== true && /no stake control|not ready/i.test(String(r.error || '')))) {
         return { ok: false, deferred: true, error: r.error };
       }
       return { ok: false, error: r?.error || 'Zero stake readback mismatch' };

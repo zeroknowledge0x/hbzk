@@ -20,8 +20,11 @@ test('a missing stake field waits, a non-zero readback does not', async () => {
   const waiting = await make(async () => ({ ok: false, error: 'No stake control on this table' }))
     ._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
   assert.equal(waiting.deferred, true);
+  const painting = await make(async () => ({ ok: false, pending: true, error: 'stake control is not ready' }))
+    ._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
+  assert.equal(painting.deferred, true);
   assert.deepEqual(clicks, []);
-  const refused = await make(async () => ({ ok: true, verified: true, observed: 25 }))
+  const refused = await make(async () => ({ ok: false, error: 'stake control is locked at 25' }))
     ._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
   assert.equal(refused.deferred, undefined);
   assert.equal(refused.ok, false);
