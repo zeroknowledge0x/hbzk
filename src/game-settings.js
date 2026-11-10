@@ -14,7 +14,12 @@ export function inspectSettings(operation={}) {
     if(/^bet amount$|^stake$|^wager$/i.test(label))kind='stake';
     else if(e.id==='hd-g-in-mult'||/^(target )?multiplier$|^payout$/i.test(label))kind='multiplier';
     else if(e.id==='hd-g-in-chance'||/^(win\s*)?chance(?:,?\s*percent)?$|^peluang( menang)?$/i.test(label))kind='winChance';
-    if(kind&&!fields[kind])fields[kind]=e;
+    if(kind){
+      const prev=fields[kind];
+      const locked=e=>!!(e&&(e.disabled||e.readOnly));
+      // A disabled empty skeleton must not hide the real stake field behind it.
+      if(!prev||(locked(prev)&&!locked(e)))fields[kind]=e;
+    }
   }
   if(operation.kind){
     const e=fields[operation.kind];

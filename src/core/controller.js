@@ -432,18 +432,19 @@ export class Controller {
       if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
       if (r?.ok === true && r.verified === true && r.observed === 0
         && (r.settings?.stake === undefined || r.settings.stake === 0)) {
-        this._stakeWaits = 0;
+        this._stakeWaitSince = 0;
         return r;
       }
       // The field is not in the DOM yet on a table that just opened. Wait, but not forever:
       // a hung read used to freeze the click loop with no log at all.
       if (r?.pending || (r && r.ok !== true && /no stake control|not ready|timed out/i.test(String(r.error || '')))) {
-        this._stakeWaits = (this._stakeWaits || 0) + (/timed out/i.test(String(r.error || '')) ? 8 : 1);
-        if (this._stakeWaits < 40) {
+        const now = this.now();
+        if (!this._stakeWaitSince) this._stakeWaitSince = now;
+        if (now - this._stakeWaitSince < 12000) {
           this.log(`controller: stake not ready (${r.error}), waiting`);
           return { ok: false, deferred: true, error: r.error };
         }
-        this._stakeWaits = 0;
+        this._stakeWaitSince = 0;
         return { ok: false, error: r.error || 'stake field never appeared' };
       }
       return { ok: false, error: r?.error || 'Zero stake readback mismatch' };
