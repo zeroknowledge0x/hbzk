@@ -186,7 +186,7 @@ export class GameFeed {
         const inGame = /\/games\/housegames-/.test(location.href);
         const NAV_CHROME = /^(toggle menu|rewards|search|chat|log ?in|register|casino|sports|casino lobby|house games|new releases|slots|live casino|house studios|game shows|blackjack|roulette|baccarat|providers|promotions|leaderboard|xp race|contest labs|affiliate|blog|help center|responsible gambling|live support|fair|rules|theatre mode|open mini player|normal|sound|settings|show more|scroll previous|scroll next|pure speed|account|wallet|weekly prize[^|]*|monthly prize[^|]*)$/i;
         // These sit in the same snapshot and used to fill the 40 slots before Higher/Lower/Skip.
-        const SNAP_SKIP = /^(manual|auto)$|\bfavourites?\b|\bfavorites?\b|recently played|^bet amount\b|^idr\b|^usd\b|^eur\b|^pol\b|currencies|intercom|messenger|live stats|\badvanced\b|instant autobet|autobet/i;
+        const SNAP_SKIP = /^(manual|auto)$|\bfavourites?\b|\bfavorites?\b|recently played|^bet amount\b|^idr\b|^usd\b|^eur\b|^pol\b|currencies|intercom|messenger|live stats|\badvanced\b|instant autobet|autobet|switch to/i;
         const priority = [];
         const dialogs = [];
         const tiles = [];
