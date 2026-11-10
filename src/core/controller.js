@@ -445,7 +445,9 @@ export class Controller {
           return { ok: false, deferred: true, error: r.error };
         }
         this._stakeWaitSince = 0;
-        return { ok: false, error: r.error || 'stake field never appeared' };
+        // Empty and locked is not a number. A non-zero lock still fails above. Don't kill the round.
+        this.log('controller: stake field stayed empty, continuing without a write');
+        return { ok: false, skipped: true, error: r.error || 'stake field never appeared' };
       }
       return { ok: false, error: r?.error || 'Zero stake readback mismatch' };
     } catch (err) { return { ok: false, error: err.message }; }
@@ -453,7 +455,7 @@ export class Controller {
 
   async _playTable(step) {
     const zero = await this._verifyZeroStake();
-    if (!zero.ok) return zero;
+    if (!zero.ok && !zero.skipped) return zero;
     this._snapshot = this._captureSnapshot();
     const worldState = this.world?.get?.() || {};
     const gameName = worldState.phase === 'playing'
