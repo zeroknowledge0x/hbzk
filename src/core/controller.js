@@ -479,6 +479,11 @@ export class Controller {
         if (fresh.length) live = fresh;
         seen = String(snap?.dialogText || '').slice(0, 240);
       }
+      if (this._blockedGame !== gameName) {
+        this._blockedGame = gameName;
+        this._blocked = new Set();
+      }
+      if (this._blocked?.size) live = live.filter((label) => !this._blocked.has(String(label).toLowerCase()));
       const offered = compressControls(legalControls(live));
       if (!offered.length) {
         this.log('controller: table not ready (no play control yet)');
@@ -574,8 +579,10 @@ export class Controller {
     if (typeof this.game?.clickText === 'function') {
       const raw = await this.game.clickText(label).catch(() => null);
       if (!raw?.ok) {
-        this.log(`controller: click "${label}" missed (${raw?.error || 'not found'})`);
-        return { ok: false, error: raw?.error || 'not found' };
+        this._blocked = this._blocked || new Set();
+        this._blocked.add(String(label).toLowerCase());
+        this.log(`controller: click "${label}" missed (${raw?.error || 'not found'}), skipping it`);
+        return { ok: false, deferred: true, error: raw?.error || 'not found' };
       }
       await this._snapPlay(raw.text || label);
       if (/^cash out/i.test(String(label))) {
