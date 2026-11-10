@@ -1633,7 +1633,8 @@ export class GameFeed {
             if (text === q) return true;
             if (/\b(info|history|rules|fair|help|amount|halve|double|wallet)\b/.test(text)) return false;
             // The snapshot glues innerText and aria into one long label. The button is the short one.
-            if (q.startsWith(text) && text.length >= 4) return true;
+            // Four letters is not enough: "Auto pick…" must not hit the Auto mode toggle.
+            if (q.startsWith(text) && text.length >= 8 && !/^(manual|auto)$/.test(text)) return true;
 
             if (!text.startsWith(q)) return false;
             const rest = text.slice(q.length).trim();
