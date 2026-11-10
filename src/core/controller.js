@@ -482,9 +482,16 @@ export class Controller {
       const named = typeof pick === 'object' && pick ? pick.label : pick;
       const label = resolveLookedClick({ controls: live, pick: named });
       if (!label) {
+        this._emptyLooks = (this._emptyLooks || 0) + 1;
+        // One quiet model reply is not a failed round. Four in a row is, so the table can change.
+        if (this._emptyLooks < 4) {
+          this.log(`controller: model chose nothing clickable (${named || 'empty'}), waiting`);
+          return { ok: false, deferred: true, error: 'model did not choose a visible control' };
+        }
         this.log(`controller: model chose nothing clickable (${named || 'empty'})`);
         return { ok: false, error: 'model did not choose a visible control' };
       }
+      this._emptyLooks = 0;
       choice = { label };
     } else {
       if (!adapter || typeof adapter.decide !== 'function') return { ok: false, error: 'no per-game policy' };

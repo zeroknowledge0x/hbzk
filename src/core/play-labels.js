@@ -81,8 +81,9 @@ export function shotLine(tag) {
 }
 
 export function labelMatchesPlay(want, label) {
-  const q = String(want || '').toLowerCase().replace(/\s+/g, ' ').trim();
-  const low = String(label || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const strip = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim().replace(/\s*\([a-z0-9]\)$/, '');
+  const q = strip(want);
+  const low = strip(label);
   if (!q || !low) return false;
   if (low === q) return true;
   if (/\b(info|history|rules|fair|help|amount|halve|double|wallet)\b/.test(low)) return false;

@@ -55,7 +55,9 @@ test('in-round selection preserves explicit Cash out over fallback Random pick',
 test('Bet does not match Bet Info', () => {
   assert.equal(labelMatchesPlay('Bet', 'Bet Info'), false);
   assert.equal(labelMatchesPlay('Bet', 'Bet'), true);
-  assert.equal(labelMatchesPlay('Higher', 'Higher / same'), true);
+  assert.equal(labelMatchesPlay('Higher / same', 'Higher / same (W)'), true);
+  assert.equal(labelMatchesPlay('Skip card', 'Skip card (Q)'), true);
+  assert.equal(labelMatchesPlay('Bet', 'Bet Amount 0.00'), false);
   assert.equal(matchPlayClick('Bet', ['Bet Info']), null);
 });
 
