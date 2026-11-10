@@ -148,7 +148,6 @@ export class Brain {
     if (this.offline) return null;
     const offered = Array.isArray(controls) ? controls.filter(Boolean) : [];
     if (!offered.length) return null;
-    const { pickFromReply } = await import('./core/look-then-click.js');
     const note = String(seen || '').replace(/\s+/g, ' ').trim().slice(0, 240);
     let text = '';
     try {
@@ -166,7 +165,7 @@ export class Brain {
       log(`brain: look skipped (${err?.message || err})`);
       return null;
     }
-    return pickFromReply(text, offered);
+    return String(text || '').split('\n')[0].replace(/^\d+[).\s]+/, '').replace(/^["'`]+|["'`]+$/g, '').trim() || null;
   }
 
   async #chat(messages, { maxTokens = 220, temperature = 0.9, timeoutMs = 20000 } = {}) {

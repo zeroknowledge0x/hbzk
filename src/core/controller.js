@@ -9,7 +9,7 @@ import { labelMatchesPlay } from './play-labels.js';
 import { kenoNumbers, readObservedProgress } from './progress.js';
 import { cashoutLine } from './play-talk.js';
 import { createScratch, exhausted, noteFailure, noteSuccess, openTask } from './reflexion.js';
-import { compressControls, legalControls, resolveLookedClick, withBudget } from './look-then-click.js';
+import { compressControls, legalControls, pickFromReply, resolveLookedClick, withBudget } from './look-then-click.js';
 
 export class Controller {
   constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random, now, advise, notifyAction, look }) {
@@ -489,12 +489,13 @@ export class Controller {
         return { ok: false, error: 'look failed' };
       }
       const named = typeof pick === 'object' && pick ? pick.label : pick;
-      const label = resolveLookedClick({ controls: live, pick: named });
+      // Resolve against the full board, not the compressed prompt. A Keno number the
+      // compressor cut still has to be clickable if the model named it.
+      const label = pickFromReply(named, live) || resolveLookedClick({ controls: live, pick: named });
       if (!label) {
         this._emptyLooks = (this._emptyLooks || 0) + 1;
-        // One quiet model reply is not a failed round. Four in a row is, so the table can change.
-        if (this._emptyLooks < 4) {
-          this.log(`controller: model chose nothing clickable (${named || 'empty'}), waiting`);
+        if (this._emptyLooks < 12) {
+          this.log(`controller: model chose nothing clickable (${String(named || 'empty').slice(0, 80)}), waiting`);
           return { ok: false, deferred: true, error: 'model did not choose a visible control' };
         }
         this.log(`controller: model chose nothing clickable (${named || 'empty'})`);
