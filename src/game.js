@@ -343,7 +343,14 @@ export class GameFeed {
             }
           } catch { /* no generic marker on this table */ }
         }
-        return { bodySnippet, title: document.title, clickables: [...dialogs, ...priority, ...tiles, ...rest].slice(0, max), outcome };
+        let dialogText = '';
+        try {
+          for (const el of deepAll('[role="dialog"],[role="alertdialog"]')) {
+            const t = norm(el.innerText).slice(0, 240);
+            if (t) { dialogText = t; break; }
+          }
+        } catch { /* no dialog on this table */ }
+        return { bodySnippet, title: document.title, dialogText, clickables: [...dialogs, ...priority, ...tiles, ...rest].slice(0, max), outcome };
       }, UI_MAX, process.env.HOUSEBETS_HANDLE || '');
       if (snap) {
         let outcome = snap.outcome && !['generic', 'handle-row', 'live-bets'].includes(snap.outcome.source) ? snap.outcome : null;
@@ -361,6 +368,7 @@ export class GameFeed {
           body: String(snap.bodySnippet || '').slice(0, BODY_CHARS),
           title: String(snap.title || ''),
           clickables: Array.isArray(snap.clickables) ? snap.clickables : [],
+          dialogText: String(snap.dialogText || '').slice(0, 240),
           outcome,
         };
       }

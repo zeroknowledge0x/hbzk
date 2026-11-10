@@ -144,21 +144,22 @@ export class Brain {
 
   // The click, for every table. The model sees the compressed control list and names one.
   // A miss, a refusal, or a dead provider is null — the caller must not click at random.
-  async chooseClick({ game, phase, controls, progress } = {}) {
+  async chooseClick({ game, phase, controls, progress, seen } = {}) {
     if (this.offline) return null;
     const offered = Array.isArray(controls) ? controls.filter(Boolean) : [];
     if (!offered.length) return null;
     const { pickFromReply } = await import('./core/look-then-click.js');
+    const note = String(seen || '').replace(/\s+/g, ' ').trim().slice(0, 240);
     let text = '';
     try {
       text = await this.#chat([
         {
           role: 'system',
-          content: 'You are looking at a Housebets demo table. Stake is locked at 0 by code. You have no script for this game. Read the controls and reply with the ONE next click, copied exactly from the list, or none. Never invent a label. Never pick a wallet, stake, or amount control.',
+          content: 'You are looking at a Housebets demo table. Stake is locked at 0 by code. You have no script for this game. Read what is on screen and reply with the ONE next click, copied exactly from the list, or none. Never invent a label. Never pick a wallet, stake, or amount control.',
         },
         {
           role: 'user',
-          content: `TABLE ${game || 'unknown'} phase=${phase || 'unknown'} progress=${Number(progress) || 0}\nCONTROLS:\n${offered.map((label, i) => `${i + 1}. ${label}`).join('\n')}`,
+          content: `TABLE ${game || 'unknown'} phase=${phase || 'unknown'} progress=${Number(progress) || 0}${note ? `\nON SCREEN: ${note}` : ''}\nCONTROLS:\n${offered.map((label, i) => `${i + 1}. ${label}`).join('\n')}`,
         },
       ], { maxTokens: 40, temperature: 0.4, timeoutMs: 8000 });
     } catch (err) {

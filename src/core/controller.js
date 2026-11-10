@@ -455,15 +455,17 @@ export class Controller {
     let choice;
     if (this.look) {
       let live = controls;
+      let seen = '';
       if (typeof this.game?.getUiSnapshot === 'function') {
         const snap = await this.game.getUiSnapshot({ force: true }).catch(() => null);
         const fresh = (snap?.clickables || []).map((item) => String(item?.text || '').trim()).filter(Boolean);
         if (fresh.length) live = fresh;
+        seen = String(snap?.dialogText || '').slice(0, 240);
       }
       const offered = compressControls(legalControls(live));
       let pick = null;
       try {
-        pick = await this.look({ game: gameName, phase: worldState.phase, controls: offered, progress });
+        pick = await this.look({ game: gameName, phase: worldState.phase, controls: offered, progress, seen });
       } catch (err) {
         this.log(`controller: look failed (${err?.message || err})`);
         return { ok: false, error: 'look failed' };

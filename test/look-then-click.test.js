@@ -103,9 +103,11 @@ test('chooseClick sends the control list to deepseek 4.1 flash and returns the n
   );
   const label = await brain.chooseClick({
     game: 'Wheel', phase: 'idle', controls: ['Bet', 'Low', 'Medium', 'High'], progress: 0,
+    seen: 'Hit on 20? Most cards bust a hard 20.',
   });
   assert.equal(label, 'Medium');
   assert.equal(sent.model, 'deepseek/deepseek-v4.1-flash');
+  assert.match(sent.messages[1].content, /ON SCREEN: Hit on 20/);
   assert.match(sent.messages[1].content, /Wheel/);
   assert.match(sent.messages[1].content, /Medium/);
   assert.match(sent.messages[0].content, /no script/i);
