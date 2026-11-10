@@ -124,11 +124,11 @@ test('every table asks the model before it clicks, and a silent model clicks not
 
 test('Mines does not fall through to a random tile when the model has not looked', async () => {
   const calls = [];
-  const board = ['Cash out $0.00', 'Random tile', 'Tile 1', 'Tile 2'];
-  const c = looked('Mines', board, 'Cash out', calls);
+  const board = ['Cash out 2.40x', 'Random tile', 'Tile 1', 'Tile 2'];
+  const c = looked('Mines', board, 'Cash out 2.40x', calls);
   await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
   assert.equal(calls.includes('RANDOM-TILE'), false);
-  assert.equal(calls.at(-1), 'Cash out');
+  assert.equal(calls.at(-1), 'Cash out 2.40x');
 });
 
 test('chooseClick sends the control list to deepseek 4.1 flash and returns the named label', async () => {
