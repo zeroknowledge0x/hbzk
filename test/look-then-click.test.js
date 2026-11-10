@@ -68,6 +68,7 @@ test('chrome and stake traps are not offered to the model', () => {
     'IDR 99,674', 'Weekly Prize', 'Search', 'Account', 'Hit anyway',
   ]);
   assert.deepEqual(offered, ['Hit', 'Stand', 'Hit anyway']);
+  assert.deepEqual(legalControls(['Bet', 'Manual', 'Auto', 'Add to favorites']), ['Bet']);
 });
 
 test('a long board is compressed without dropping the decision buttons', () => {

@@ -8,13 +8,15 @@ const NEVER = /\b(info|history|rules|fair|help|amount|halve|double|wallet)\b/i;
 // "Cash out", so the money rows are matched from the start of the label.
 const CHROME = /\b(account|search|weekly prize|favourite|favorite|recently played|currencies)\b/i;
 const MONEY = /^(idr|usd|eur|pol|bnb|usdt|usdc|sol|eth)\b/i;
+// Manual/Auto only switch the bet mode. Clicking them in a loop is not playing.
+const MODE = /^(manual|auto)$/i;
 const DECISION = /cash out|random|hit anyway|cancel|don't ask|dont ask|no thanks|close|stand|higher|lower|\bskip\b|\bbet\b/i;
 
 export function legalControls(controls = []) {
   const out = [];
   for (const raw of controls) {
     const text = String(raw || '').replace(/\s+/g, ' ').trim();
-    if (!text || NEVER.test(text) || CHROME.test(text) || MONEY.test(text)) continue;
+    if (!text || NEVER.test(text) || CHROME.test(text) || MONEY.test(text) || MODE.test(text)) continue;
     if (out.some((c) => c.toLowerCase() === text.toLowerCase())) continue;
     out.push(text);
   }
