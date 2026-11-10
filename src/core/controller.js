@@ -463,6 +463,10 @@ export class Controller {
         seen = String(snap?.dialogText || '').slice(0, 240);
       }
       const offered = compressControls(legalControls(live));
+      if (!offered.length) {
+        this.log('controller: table not ready (no play control yet)');
+        return { ok: false, deferred: true, error: 'table not ready' };
+      }
       let pick = null;
       try {
         pick = await this.look({ game: gameName, phase: worldState.phase, controls: offered, progress, seen });

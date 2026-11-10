@@ -980,7 +980,7 @@ setInterval(() => {
   saveLedger(LEDGER_FILE, uptimeLedger);
   log(`hubie: ${ledgerLine(uptimeLedger, Date.now())} · ${metricsLine(chatMetrics, Date.now())} · ${chainLine(llmChain, Date.now())}`);
   // Drift watch: the same three signals that have actually broken a run here.
-  driftWatch = noteSample(driftWatch, { frameAgeMs, frameMs: tick.avg, at: Date.now() });
+  driftWatch = noteSample(driftWatch, { frameAgeMs: frameAge, frameMs: tick.avg, at: Date.now() });
   driftWatch = evaluate(driftWatch, Date.now());
   const drift = alertLine(driftWatch, Date.now());
   if (drift !== 'DRIFT clean') {

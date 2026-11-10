@@ -5,6 +5,14 @@ import { Controller } from '../src/core/controller.js';
 import { Planner } from '../src/core/planner.js';
 import { World } from '../src/core/world.js';
 import { pickFromReply, compressControls, legalControls, resolveLookedClick } from '../src/core/look-then-click.js';
+test('an empty table waits instead of failing the round', async () => {
+  const calls = [];
+  const c = looked('Max Win', [], 'Bet', calls);
+  const result = await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
+  assert.equal(result.deferred, true);
+  assert.equal(calls.filter((x) => typeof x === 'string').length, 0);
+});
+
 test('a sentence still resolves to the control it named, and Hit anyway beats Hit', () => {
   const controls = ['Hit', 'Stand', 'Hit anyway', 'Cancel'];
   assert.equal(pickFromReply('I would stand here.', controls), 'Stand');
