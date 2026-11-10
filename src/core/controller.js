@@ -432,6 +432,11 @@ export class Controller {
       if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
       if (r?.ok === true && r.verified === true && r.observed === 0
         && (r.settings?.stake === undefined || r.settings.stake === 0)) return r;
+      // The field is not in the DOM yet on a table that just opened. Waiting is not a
+      // failed round — failing it is what killed the goal two seconds after every switch.
+      if (r && r.ok !== true && /no stake control/i.test(String(r.error || ''))) {
+        return { ok: false, deferred: true, error: r.error };
+      }
       return { ok: false, error: r?.error || 'Zero stake readback mismatch' };
     } catch (err) { return { ok: false, error: err.message }; }
   }

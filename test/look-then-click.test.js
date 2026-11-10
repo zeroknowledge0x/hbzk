@@ -5,6 +5,29 @@ import { Controller } from '../src/core/controller.js';
 import { Planner } from '../src/core/planner.js';
 import { World } from '../src/core/world.js';
 import { pickFromReply, compressControls, legalControls, resolveLookedClick } from '../src/core/look-then-click.js';
+test('a missing stake field waits, a non-zero readback does not', async () => {
+  const world = new World({ game: 'Dice', phase: 'idle', controls: ['Bet'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Dice', rounds: 1 });
+  const clicks = [];
+  const make = (setStake) => new Controller({
+    world, planner,
+    game: { setStake, clickText: async (label) => { clicks.push(label); return { ok: true, text: label }; }, getReport: () => ({}) },
+    tools: { run: async () => ({ ok: false }) },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    log: () => {},
+  });
+  const waiting = await make(async () => ({ ok: false, error: 'No stake control on this table' }))
+    ._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
+  assert.equal(waiting.deferred, true);
+  assert.deepEqual(clicks, []);
+  const refused = await make(async () => ({ ok: true, verified: true, observed: 25 }))
+    ._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
+  assert.equal(refused.deferred, undefined);
+  assert.equal(refused.ok, false);
+  assert.deepEqual(clicks, []);
+});
+
 test('an empty table waits instead of failing the round', async () => {
   const calls = [];
   const c = looked('Max Win', [], 'Bet', calls);
