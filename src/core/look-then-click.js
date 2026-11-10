@@ -11,12 +11,17 @@ const MONEY = /^(idr|usd|eur|pol|bnb|usdt|usdc|sol|eth)\b/i;
 // Manual/Auto only switch the bet mode. Clicking them in a loop is not playing.
 const MODE = /^(manual|auto)$/i;
 const DECISION = /cash out|random|hit anyway|cancel|don't ask|dont ask|no thanks|close|stand|higher|lower|\bskip\b|\bbet\b/i;
+// A cash-out row sitting at 0 or 1.00x does nothing. Clicking it in a loop is not a round.
+function zeroCashout(text) {
+  if (!/cash out/i.test(text)) return false;
+  return /\b1\.00x\b/i.test(text) || /\$0(?:\.00)?\b/.test(text) || /\bcash out(?:\s+idr)?\s+0(?:\.00)?\b/i.test(text);
+}
 
 export function legalControls(controls = []) {
   const out = [];
   for (const raw of controls) {
     const text = String(raw || '').replace(/\s+/g, ' ').trim();
-    if (!text || NEVER.test(text) || CHROME.test(text) || MONEY.test(text) || MODE.test(text)) continue;
+    if (!text || NEVER.test(text) || CHROME.test(text) || MONEY.test(text) || MODE.test(text) || zeroCashout(text)) continue;
     if (out.some((c) => c.toLowerCase() === text.toLowerCase())) continue;
     out.push(text);
   }

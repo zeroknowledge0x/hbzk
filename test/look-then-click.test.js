@@ -69,10 +69,11 @@ test('chrome and stake traps are not offered to the model', () => {
   ]);
   assert.deepEqual(offered, ['Hit', 'Stand', 'Hit anyway']);
   assert.deepEqual(legalControls(['Bet', 'Manual', 'Auto', 'Add to favorites']), ['Bet']);
+  assert.deepEqual(legalControls(['Cash out 0 1.00x', 'Cash out IDR 0', 'Cash out 2.40x', 'Higher']), ['Cash out 2.40x', 'Higher']);
 });
 
 test('a long board is compressed without dropping the decision buttons', () => {
-  const board = ['Cash out $0.00', 'Random tile'];
+  const board = ['Cash out 2.40x', 'Random tile'];
   for (let i = 1; i <= 25; i++) board.push(`Tile ${i}`);
   const packed = compressControls(board, 8);
   assert.ok(packed.length <= 8, String(packed.length));
