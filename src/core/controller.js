@@ -438,8 +438,8 @@ export class Controller {
       // The field is not in the DOM yet on a table that just opened. Wait, but not forever:
       // a hung read used to freeze the click loop with no log at all.
       if (r?.pending || (r && r.ok !== true && /no stake control|not ready|timed out/i.test(String(r.error || '')))) {
-        this._stakeWaits = (this._stakeWaits || 0) + 1;
-        if (this._stakeWaits < 6) {
+        this._stakeWaits = (this._stakeWaits || 0) + (/timed out/i.test(String(r.error || '')) ? 8 : 1);
+        if (this._stakeWaits < 40) {
           this.log(`controller: stake not ready (${r.error}), waiting`);
           return { ok: false, deferred: true, error: r.error };
         }
