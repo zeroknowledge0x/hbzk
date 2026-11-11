@@ -3,7 +3,9 @@
 // stays small, and accepts a pick solely when that exact control is on the table.
 import { labelMatchesPlay } from './play-labels.js';
 
-const NEVER = /\b(info|history|rules|fair|help|amount|halve|double|wallet)\b/i;
+// Mode toggles and read-only fields sit next to the bet button and click through without starting
+// or ending anything.
+const NEVER = /\b(info|history|rules|fair|help|amount|halve|double|wallet|design|profit on win|range (low|high))\b/i;
 // Page chrome that sits in the same snapshot as the table. "Cash" alone would also hide
 // "Cash out", so the money rows are matched from the start of the label.
 const CHROME = /\b(account|search|weekly prize|favourites?|favorites?|recently played|currencies|intercom|messenger|live stats|advanced|instant autobet|autobet|switch to|casino lobby|rewards|more games|toggle menu|house games|providers)\b/i;

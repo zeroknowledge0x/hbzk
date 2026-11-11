@@ -11,6 +11,10 @@ import { cashoutLine } from './play-talk.js';
 import { createScratch, exhausted, noteFailure, noteSuccess, openTask } from './reflexion.js';
 import { compressControls, legalControls, pickFromReply, resolveLookedClick, withBudget } from './look-then-click.js';
 
+// A click that puts a bet on the table. Direction presets, mode toggles, tiles and in-round
+// actions are not bets; only these arm the round timer.
+const STARTS_ROUND = /^(bet|deal|spin|roll|go|play|bet again|new bet|repeat)\b/i;
+
 export class Controller {
   constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random, now, advise, notifyAction, look }) {
     this.world = world;
@@ -58,7 +62,13 @@ export class Controller {
     return !!this._betAt && now - this._betAt < this._betCapMs;
   }
 
-  _noteBet() { this._betAt = this.now(); }
+  // Only a click that puts a bet on the table arms the round timer. A direction preset ("Outside"),
+  // a mode toggle or a tile does not — otherwise the host holds itself on a table forever while it
+  // fiddles with controls, which is exactly what it did on Dice.
+  _noteBet(label) {
+    if (!STARTS_ROUND.test(String(label || ''))) return;
+    this._betAt = this.now();
+  }
 
   _noteSettled() { this._betAt = 0; this._fallbackHolds = 0; this._repeatLabel = null; this._repeatCount = 0; }
 
@@ -675,14 +685,14 @@ export class Controller {
       }
       this.notifyAction?.(String(label));
       // Taking a bet off the table is the one click that ends a round instead of starting one.
-      if (!/^cash out/i.test(String(label))) this._noteBet();
+      this._noteBet(raw.text || label);
       this._noteRepeat(raw.text || label);
       return { ok: true, detail: raw };
     }
     const raw = await this.tools.run('click', { label });
     if (raw?.ok) {
       await this._snapPlay(raw.text || label);
-      if (!/^cash out/i.test(String(label))) this._noteBet();
+      this._noteBet(raw.text || label);
       this._noteRepeat(raw.text || label);
     }
     return raw;

@@ -198,7 +198,7 @@ test('a table switch waits for the round that is already on the table', async ()
     random: () => 0,
     now: () => clock,
     log: () => {},
-    look: async () => 'Random tile',
+    look: async () => 'Bet',
   });
   const bet = await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
   assert.equal(bet.ok, true);
@@ -290,6 +290,28 @@ test('a label the round stopped answering is no longer offered to the model', as
   const last = seenViews.at(-1);
   assert.equal(last.controls.includes('Random tile'), false, 'a dead click is dropped from the board');
   assert.ok(last.controls.includes('Cash out 2.40x'), 'the way out of the round is still offered');
+});
+
+test('a direction preset does not hold the table, a bet does', async () => {
+  const world = new World({ game: 'Dice', phase: 'idle', controls: ['Bet', 'Over', 'Under', 'Inside', 'Outside'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Dice', rounds: 1 });
+  const c = new Controller({
+    world,
+    planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (l) => ({ ok: true, text: l }), getReport: () => ({}) },
+    tools: { run: async () => ({ ok: true }) },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    now: () => 1000,
+    log: () => {},
+    look: async () => 'Outside',
+  });
+  await c._executeStep({ kind: 'start_round', args: { label: 'Outside' } });
+  assert.equal(c._roundLive(), false, 'fiddling with the range is not a round in progress');
+
+  c.look = async () => 'Bet';
+  await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
+  assert.equal(c._roundLive(), true, 'a bet on the table holds it');
 });
 
 test('a second wait on the same table is short', async () => {
