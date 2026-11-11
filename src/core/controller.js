@@ -57,7 +57,7 @@ export class Controller {
 
   _noteBet() { this._betAt = this.now(); }
 
-  _noteSettled() { this._betAt = 0; }
+  _noteSettled() { this._betAt = 0; this._fallbackHolds = 0; }
 
   // 6-15 s, the same band the quiet-talk timer uses for a human beat.
   _dwell() { return 6000 + Math.floor(this.random() * 9000); }
@@ -425,6 +425,18 @@ export class Controller {
         if (this._roundLive()) {
           const actual = this.world?.get?.()?.game;
           if (byName(actual)?.name !== byName(step.args?.game)?.name) {
+            // A fallback that the same live bet keeps holding is a dead table, not a round in
+            // progress. Without this the planner spins on the table until the bet cap expires.
+            if (step.fallback) {
+              this._fallbackHolds = (this._fallbackHolds || 0) + 1;
+              if (this._fallbackHolds > 2) {
+                this.log('controller: round would not settle, leaving the table anyway');
+                this._noteSettled();
+                const away = await this.tools.run('change_game', step.args);
+                if (away?.ok) this._noteSettled();
+                return away;
+              }
+            }
             await this._playTable({ ...step, game: actual });
             return { ok: false, deferred: true, reason: 'in-round', error: 'Waiting for current table before switch' };
           }

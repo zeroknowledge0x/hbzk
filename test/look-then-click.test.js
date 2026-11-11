@@ -153,6 +153,7 @@ test('chooseClick sends the control list to deepseek 4.1 flash and returns the n
   assert.match(sent.messages[1].content, /Wheel/);
   assert.match(sent.messages[1].content, /Medium/);
   assert.match(sent.messages[0].content, /no script/i);
+  assert.match(sent.messages[1].content, /label FIRST/i, 'the answer comes first, so a cut-off reply still carries it');
 });
 
 test('the decision runs on its own model when one is configured', async () => {
@@ -220,6 +221,41 @@ test('a table switch waits for the round that is already on the table', async ()
   await c.tick();
   assert.equal(c._deferredGame, null);
   assert.equal(planner.status().goal.game, 'Dice');
+});
+
+test('a fallback held by the same bet leaves the table instead of spinning', async () => {
+  const changed = [];
+  let clock = 500000;
+  const world = new World({ game: 'Hilo', phase: 'idle', controls: ['Higher / same', 'Lower / same', 'Bet'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Hilo', rounds: 1 });
+  const c = new Controller({
+    world,
+    planner,
+    game: {
+      setStake: async () => ({ ok: true, verified: true, observed: 0 }),
+      clickText: async (label) => ({ ok: true, text: label }),
+      getReport: () => ({ url: '' }),
+    },
+    tools: { run: async (name, args) => { if (name === 'change_game') changed.push(args?.game); return { ok: true }; } },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    random: () => 0,
+    now: () => clock,
+    log: () => {},
+    look: async () => 'Bet',
+  });
+  await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
+
+  const step = { kind: 'enter_game', tool: 'change_game', args: { game: 'Dice' }, fallback: true };
+  const first = await c._executeStep(step);
+  const second = await c._executeStep(step);
+  assert.equal(changed.includes('Dice'), false, 'the first holds still wait for the round');
+  assert.equal(first.deferred, true);
+  assert.equal(second.deferred, true);
+  const third = await c._executeStep(step);
+  assert.equal(changed.includes('Dice'), true, 'a round that never settles is abandoned');
+  assert.equal(c._roundLive(), false);
+  assert.equal(third.ok, true);
 });
 
 test('a second wait on the same table is short', async () => {

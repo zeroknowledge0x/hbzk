@@ -158,9 +158,9 @@ export class Brain {
         },
         {
           role: 'user',
-          content: `TABLE ${game || 'unknown'} phase=${phase || 'unknown'} progress=${Number(progress) || 0}${note ? `\nON SCREEN: ${note}` : ''}\nCONTROLS:\n${offered.map((label, i) => `${i + 1}. ${label}`).join('\n')}\nLast line only: one label copied from the list, or none.`,
+          content: `TABLE ${game || 'unknown'} phase=${phase || 'unknown'} progress=${Number(progress) || 0}${note ? `\nON SCREEN: ${note}` : ''}\nCONTROLS:\n${offered.map((label, i) => `${i + 1}. ${label}`).join('\n')}\nAnswer with the label FIRST, alone on line 1, copied from the list — or the single word none. Nothing else on line 1.`,
         },
-      ], { maxTokens: 120, temperature: 0, timeoutMs: 15000, joinReasoning: true, model: this.cfg.llmDecisionModel || this.cfg.llmModel });
+      ], { maxTokens: 300, temperature: 0, timeoutMs: 15000, joinReasoning: true, model: this.cfg.llmDecisionModel || this.cfg.llmModel });
     } catch (err) {
       log(`brain: look skipped (${err?.message || err})`);
       return null;
