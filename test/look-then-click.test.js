@@ -1,9 +1,13 @@
 // The click is whatever the model picked after it saw the table. A random policy is not a fallback.
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Controller } from '../src/core/controller.js';
 import { Planner } from '../src/core/planner.js';
 import { World } from '../src/core/world.js';
+import { saveDeclined } from '../src/core/declined.js';
 import { pickFromReply, compressControls, legalControls, resolveLookedClick, withBudget } from '../src/core/look-then-click.js';
 test('a missing stake field waits, a non-zero readback does not', async () => {
   const world = new World({ game: 'Dice', phase: 'idle', controls: ['Bet'], stake: 0 });
@@ -414,6 +418,7 @@ test('an idle chip clicked twice stops being offered, Bet does not', async () =>
 test('a table whose result cannot be read comes off the rotation after three tries', async () => {
   const logs = [];
   const declined = [];
+  const file = join(tmpdir(), `declined-budget-${Date.now()}.json`);
   const world = new World({ game: 'Dice', phase: 'idle', controls: ['Bet'], stake: 0 });
   const failing = {
     tick: () => ({ kind: 'await_result', fallback: null }),
@@ -430,6 +435,7 @@ test('a table whose result cannot be read comes off the rotation after three tri
     verifier: { waitFor: async () => ({ ok: false }) },
     rotation: { decline: (name) => declined.push(name), playNow: () => {}, due: () => false },
     playable: ['Dice', 'Keno'],
+    declinedFile: file,
     now: () => clock,
     log: (line) => logs.push(String(line)),
     look: async () => 'Bet',
@@ -438,6 +444,7 @@ test('a table whose result cannot be read comes off the rotation after three tri
   assert.deepEqual(declined, ['Dice'], 'the rotation is told, not just the controller');
   assert.equal(c.playable.has('dice'), false, 'the table is no longer offered to the plan');
   assert.ok(logs.some((l) => /Dice failed 3 result reads in a row/.test(l)), logs.join(' | '));
+  rmSync(file, { force: true });
 });
 
 test('a step that clicks without ever settling is bounded and named', async () => {
@@ -465,6 +472,54 @@ test('a step that clicks without ever settling is bounded and named', async () =
   // Nine clicks for the held enter_game, then the plan moves on and takes its next step.
   assert.ok(clicks.length <= 10, `clicks bounded, got ${clicks.length}`);
   assert.ok(logs.some((l) => /enter_game clicked 9 times without settling/.test(l)), logs.join(' | '));
+});
+
+test('a table declined earlier today stays off the rotation after a restart', async () => {
+  const logs = [];
+  const declined = [];
+  const file = join(tmpdir(), `declined-${Date.now()}.json`);
+  saveDeclined(file, 'Dice', '3 result reads in a row', 1_700_000_000_000);
+  const world = new World({ game: 'Hilo', phase: 'idle', controls: ['Bet'], stake: 0 });
+  const planner = new Planner({ world });
+  const c = new Controller({
+    world,
+    planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async () => ({ ok: true }), getReport: () => ({}) },
+    tools: { run: async () => ({ ok: true }) },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    rotation: { decline: (name) => declined.push(name), playNow: () => {}, due: () => false, random: () => 'Hilo', next: () => 'Hilo' },
+    playable: ['Dice', 'Hilo'],
+    declinedFile: file,
+    now: () => 1_700_000_000_000 + 60000,
+    log: (l) => logs.push(String(l)),
+    look: async () => 'Bet',
+  });
+  await c.tick();
+  assert.equal(c.playable.has('dice'), false, 'the dead table is not offered again');
+  assert.deepEqual(declined, ['Dice'], 'the rotation pool is pruned too');
+  assert.ok(logs.some((l) => /Dice declined earlier today \(3 result reads in a row\)/.test(l)), logs.join(' | '));
+  rmSync(file, { force: true });
+});
+
+test('a label the filter removed cannot be reached by naming it', async () => {
+  const clicks = [];
+  const world = new World({ game: 'Wheel', phase: 'playing', controls: ['Bet', 'Cash out $0.00', 'Cash out 2.40x'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Wheel', rounds: 1 });
+  const c = new Controller({
+    world,
+    planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (l) => { clicks.push(l); return { ok: true, text: l }; }, getReport: () => ({}) },
+    tools: { run: async () => ({ ok: true }) },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    now: () => 1000,
+    log: () => {},
+    look: async () => 'Cash out $0.00',
+  });
+  c._active = true;
+  const first = await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
+  assert.equal(clicks.includes('Cash out $0.00'), false, 'the idle zero row is not clickable by name');
+  assert.equal(first.ok, false, 'the pick is refused, not clicked');
 });
 
 test('a second wait on the same table is short', async () => {

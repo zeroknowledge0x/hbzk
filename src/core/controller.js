@@ -10,6 +10,7 @@ import { kenoNumbers, readObservedProgress } from './progress.js';
 import { cashoutLine } from './play-talk.js';
 import { createScratch, exhausted, noteFailure, noteSuccess, openTask } from './reflexion.js';
 import { boardTable } from './play-labels.js';
+import { loadDeclined, saveDeclined } from './declined.js';
 import { compressControls, legalControls, pickFromReply, resolveLookedClick, withBudget } from './look-then-click.js';
 
 // A click that puts a bet on the table. Direction presets, mode toggles, tiles and in-round
@@ -21,7 +22,7 @@ const STARTS_ROUND = /^(bet|deal|spin|roll|go|play|bet again|new bet|repeat)\b/i
 const MODE_CHIP = /^(classic|low|medium|high|over|under|inside|outside)$/i;
 
 export class Controller {
-  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random, now, advise, notifyAction, look }) {
+  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random, now, advise, notifyAction, look, declinedFile }) {
     this.world = world;
     this.tools = tools;
     this.planner = planner;
@@ -67,6 +68,10 @@ export class Controller {
     this._chipCount = 0;
     // Clicks spent on the current step without it ever settling.
     this._stepClicks = 0;
+    // Tables declined earlier today, read back from disk so a restart does not re-offer them.
+    this._declinedFile = declinedFile || 'data/declined.json';
+    this._declined = loadDeclined(this._declinedFile, this.now());
+    this._declinedApplied = false;
   }
 
   _roundLive(now = this.now()) {
@@ -346,6 +351,17 @@ export class Controller {
 
   async _tick() {
     if (this._paused || this._recovering()) return;
+    // A table declined earlier today stays out of this run too, and the log says so.
+    if (this._declined?.size && !this._declinedApplied) {
+      this._declinedApplied = true;
+      for (const [name, entry] of this._declined) {
+        const key = String(name).toLowerCase();
+        if (!this.playable.has(key)) continue;
+        this.playable.delete(key);
+        this.rotation?.decline?.(name);
+        this.log(`controller: ${name} declined earlier today (${entry.reason}) — staying off the rotation`);
+      }
+    }
     if (!this._active) {
       // A switch that was asked for during a round runs the moment that round is over.
       if (this._deferredGame && !this._roundLive()) {
@@ -460,9 +476,10 @@ export class Controller {
       this._goalFails.set(game, fails);
       if (game && fails >= 3 && this.playable.has(String(game).toLowerCase())) {
         // A table whose result cannot be read is a wasted round, not an unlucky one. Three in a
-        // row and it comes off this run's rotation, loudly.
+        // row and it comes off this run's rotation, loudly — and off the next run's too.
         this.playable.delete(String(game).toLowerCase());
         this.rotation?.decline?.(game);
+        saveDeclined(this._declinedFile, game, `${fails} result reads in a row`, this.now());
         this.log(`controller: ${game} failed ${fails} result reads in a row — off the rotation until its sensor is fixed`);
         this._nextRoundAt = 0;
       }
@@ -686,7 +703,13 @@ export class Controller {
       if (this._chipCount >= 2 && this._chipLabel && worldState.phase !== 'playing') {
         live = live.filter((label) => String(label).toLowerCase() !== this._chipLabel);
       }
-      const offered = compressControls(legalControls(live));
+      // The board the model may pick from: filtered, but not compressed. Resolution happens against
+      // this list, not the raw snapshot — a zero cash-out row, a wallet label or a chrome button is
+      // out of the offer, and naming one anyway must not walk around the filter (measured:
+      // `Cash out $0.00` clicked twice on Wheel). It is still the full legal board, so a Keno number
+      // the compressor folded into "… and N more" stays clickable.
+      const legalBoard = legalControls(live);
+      const offered = compressControls(legalBoard);
       if (!offered.length) {
         this.log('controller: table not ready (no play control yet)');
         return { ok: false, deferred: true, error: 'table not ready' };
@@ -701,7 +724,7 @@ export class Controller {
       const named = typeof pick === 'object' && pick ? pick.label : pick;
       // Resolve against the full board, not the compressed prompt. A Keno number the
       // compressor cut still has to be clickable if the model named it.
-      const label = pickFromReply(named, live) || resolveLookedClick({ controls: live, pick: named });
+      const label = pickFromReply(named, legalBoard) || resolveLookedClick({ controls: legalBoard, pick: named });
       if (!label) {
         this._emptyLooks = (this._emptyLooks || 0) + 1;
         if (this._emptyLooks < 12) {

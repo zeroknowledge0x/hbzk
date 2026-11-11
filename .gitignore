@@ -60,6 +60,7 @@ data/telegram.json
 
 # Table rotation cursor (runtime position in the lobby, not source)
 data/rotation.json
+data/declined.json
 
 # Unattended-run ledger (runtime state, survives restarts on the host)
 data/uptime.json
