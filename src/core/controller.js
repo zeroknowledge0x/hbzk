@@ -16,6 +16,10 @@ import { compressControls, legalControls, pickFromReply, resolveLookedClick, wit
 // actions are not bets; only these arm the round timer.
 const STARTS_ROUND = /^(bet|deal|spin|roll|go|play|bet again|new bet|repeat)\b/i;
 
+// Risk and mode chips. They set a dial (Keno/Wheel/Plinko risk, Dice's roll side) and never start
+// a round on their own.
+const MODE_CHIP = /^(classic|low|medium|high|over|under|inside|outside)$/i;
+
 export class Controller {
   constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random, now, advise, notifyAction, look }) {
     this.world = world;
@@ -58,6 +62,9 @@ export class Controller {
     this._repeatCount = 0;
     // Consecutive goals that failed for the same table (a result read that never arrived).
     this._goalFails = new Map();
+    // The idle dial the model keeps turning, and how many times in a row.
+    this._chipLabel = null;
+    this._chipCount = 0;
   }
 
   _roundLive(now = this.now()) {
@@ -73,13 +80,28 @@ export class Controller {
     this._betAt = this.now();
   }
 
-  _noteSettled() { this._betAt = 0; this._fallbackHolds = 0; this._repeatLabel = null; this._repeatCount = 0; }
+  _noteSettled() { this._betAt = 0; this._fallbackHolds = 0; this._repeatLabel = null; this._repeatCount = 0; this._chipLabel = null; this._chipCount = 0; }
+
+  // How long a table change is given to paint before the next try counts. Overridable so a test
+  // does not have to wait.
+  _switchGraceMs() {
+    const raw = Number(process.env.HUBIE_SWITCH_GRACE_MS);
+    return Number.isFinite(raw) && raw >= 0 ? raw : 10000;
+  }
 
   _noteRepeat(label) {
     const key = String(label || '').toLowerCase();
     if (!key) return;
     if (key === this._repeatLabel) this._repeatCount += 1;
     else { this._repeatLabel = key; this._repeatCount = 1; }
+    // Track the idle dials separately: a chip is allowed to vary the table, not to replace play.
+    if (MODE_CHIP.test(key)) {
+      this._chipCount = (key === this._chipLabel) ? this._chipCount + 1 : 1;
+      this._chipLabel = key;
+    } else if (STARTS_ROUND.test(key)) {
+      this._chipLabel = null;
+      this._chipCount = 0;
+    }
   }
 
   // 6-15 s, the same band the quiet-talk timer uses for a human beat.
@@ -598,12 +620,20 @@ export class Controller {
       if (onScreen && planned && byName(onScreen)?.name !== byName(planned)?.name) {
         const key = `${onScreen}->${planned}`;
         this._boardSwitches = this._boardSwitches || new Map();
-        const tries = (this._boardSwitches.get(key) || 0) + 1;
-        this._boardSwitches.set(key, tries);
-        if (tries > 3) {
+        const entry = this._boardSwitches.get(key) || { tries: 0, at: 0 };
+        // A table change paints over seconds, not ticks. While the switch we just asked for is
+        // still in flight, stay quiet: four ticks in three seconds used to burn the whole budget
+        // and declare a working table dead (measured: Mines abandoned 3 s after the request).
+        if (entry.tries > 0 && this.now() - entry.at < this._switchGraceMs()) {
+          return { ok: false, deferred: true, error: `${planned} still loading` };
+        }
+        entry.tries += 1;
+        entry.at = this.now();
+        this._boardSwitches.set(key, entry);
+        if (entry.tries > 3) {
           // The planned table will not come up. Playing the one that is actually open beats
           // standing still on the stream.
-          this.log(`controller: ${planned} will not come up after ${tries} tries — playing ${onScreen} instead`);
+          this.log(`controller: ${planned} will not come up after ${entry.tries} tries — playing ${onScreen} instead`);
           this._noteSettled();
           this.planner?.setGoal?.({ kind: 'play', game: onScreen, rounds: 1 });
           return { ok: false, deferred: true, error: 'planned table would not come up' };
@@ -626,6 +656,12 @@ export class Controller {
         : null;
       if (this._repeatCount >= 10 && this._repeatLabel) {
         live = live.filter((label) => String(label).toLowerCase() !== this._repeatLabel);
+      }
+      // A risk or mode chip sets a dial; it never starts a round. Two in a row while the table is
+      // idle is the model turning the same dial instead of playing (measured: Wheel's "Medium"
+      // clicked 12 times in 7 minutes), so the chip stops being offered and Bet stays.
+      if (this._chipCount >= 2 && this._chipLabel && worldState.phase !== 'playing') {
+        live = live.filter((label) => String(label).toLowerCase() !== this._chipLabel);
       }
       const offered = compressControls(legalControls(live));
       if (!offered.length) {

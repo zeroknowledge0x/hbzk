@@ -347,19 +347,68 @@ test('a plan for another table is not clicked, and a table that will not load is
   planner.setGoal({ game: 'Keno', rounds: 3 });
   const realSetGoal = planner.setGoal.bind(planner);
   planner.setGoal = (g) => { goals.push(g); return realSetGoal(g); };
+  let clock = 1000;
   const c = new Controller({
     world,
     planner,
     game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (l) => ({ ok: true, text: l }), getReport: () => ({}) },
     tools: { run: async (name, args) => { if (name === 'change_game') changed.push(args.game); return { ok: true }; } },
     verifier: { waitFor: async () => ({ ok: false }) },
-    now: () => 1000,
+    now: () => clock,
     log: () => {},
     look: async () => 'Skip card',
   });
-  for (let i = 0; i < 4; i++) await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
+  for (let i = 0; i < 4; i++) { await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } }); clock += 11000; }
   assert.deepEqual(changed, ['Keno', 'Keno', 'Keno'], 'three tries to bring Keno up, never a Hilo card click');
   assert.equal(goals.at(-1).game, 'Hilo', 'a table that will not come up is dropped for the open one');
+});
+
+test('a switch in flight is not re-fired on the next tick', async () => {
+  const changed = [];
+  let clock = 1000;
+  const world = new World({ game: 'Hilo', phase: 'idle', controls: ['Bet', 'Higher / same', 'Skip card'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Keno', rounds: 3 });
+  const c = new Controller({
+    world,
+    planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (l) => ({ ok: true, text: l }), getReport: () => ({}) },
+    tools: { run: async (name, args) => { if (name === 'change_game') changed.push(args.game); return { ok: true }; } },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    now: () => clock,
+    log: () => {},
+    look: async () => 'Skip card',
+  });
+  await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
+  // Ticks are ~1 s apart; four of them must not spend the whole retry budget in three seconds.
+  for (let i = 0; i < 4; i++) { clock += 1000; await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } }); }
+  assert.deepEqual(changed, ['Keno'], 'one switch request, then wait for the page to paint');
+  clock += 11000;
+  await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
+  assert.deepEqual(changed, ['Keno', 'Keno'], 'a real retry only after the grace window');
+});
+
+test('an idle chip clicked twice stops being offered, Bet does not', async () => {
+  const views = [];
+  let clock = 1000;
+  const world = new World({ game: 'Wheel', phase: 'idle', controls: ['Bet', 'Low', 'Medium', 'High'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Wheel', rounds: 3 });
+  const c = new Controller({
+    world,
+    planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (l) => ({ ok: true, text: l }), getReport: () => ({}) },
+    tools: { run: async () => ({ ok: true }) },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    now: () => clock,
+    log: () => {},
+    look: async (view) => { views.push(view); return 'Medium'; },
+  });
+  for (let i = 0; i < 3; i++) { clock += 2000; await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } }); }
+  const last = views.at(-1);
+  assert.equal(last.controls.some((l) => /^medium$/i.test(l)), false, 'the dial the model kept turning is dropped');
+  assert.ok(last.controls.some((l) => /^bet$/i.test(l)), 'the way to actually play is still there');
+  assert.ok(last.controls.some((l) => /high/i.test(l)), 'the other chips are untouched');
 });
 
 test('a table whose result cannot be read comes off the rotation after three tries', async () => {
