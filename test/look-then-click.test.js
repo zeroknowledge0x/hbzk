@@ -343,7 +343,7 @@ test('a board showing another table is switched, never clicked', async () => {
   assert.deepEqual(changed, ['Dice'], 'the tile board is not clicked, Dice is opened instead');
 });
 
-test('a plan for another table is not clicked, and a table that will not load is dropped', async () => {
+test('a plan for another table opens that table, and a table that will not load is dropped', async () => {
   const changed = [];
   const goals = [];
   const world = new World({ game: 'Hilo', phase: 'idle', controls: ['Bet', 'Higher / same', 'Skip card'], stake: 0 });
@@ -356,14 +356,15 @@ test('a plan for another table is not clicked, and a table that will not load is
     world,
     planner,
     game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (l) => ({ ok: true, text: l }), getReport: () => ({}) },
-    tools: { run: async (name, args) => { if (name === 'change_game') changed.push(args.game); return { ok: true }; } },
+    tools: { run: async (name, args) => { if (name === 'change_game') { changed.push(args.game); return { ok: false, error: 'lobby card not found' }; } return { ok: true }; } },
     verifier: { waitFor: async () => ({ ok: false }) },
     now: () => clock,
     log: () => {},
     look: async () => 'Skip card',
   });
   for (let i = 0; i < 4; i++) { await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } }); clock += 11000; }
-  assert.deepEqual(changed, ['Keno', 'Keno', 'Keno'], 'three tries to bring Keno up, never a Hilo card click');
+  assert.equal(changed.length, 4, 'four real attempts on the planned table');
+  assert.ok(changed.every((g) => g === 'Keno'));
   assert.equal(goals.at(-1).game, 'Hilo', 'a table that will not come up is dropped for the open one');
 });
 
@@ -384,7 +385,8 @@ test('a switch in flight is not re-fired on the next tick', async () => {
     look: async () => 'Skip card',
   });
   await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
-  // Ticks are ~1 s apart; four of them must not spend the whole retry budget in three seconds.
+  // Ticks are ~1 s apart and the switch itself reports ok, but the page still has to paint: the
+  // next ticks must not fire another navigation at it.
   for (let i = 0; i < 4; i++) { clock += 1000; await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } }); }
   assert.deepEqual(changed, ['Keno'], 'one switch request, then wait for the page to paint');
   clock += 11000;
@@ -554,6 +556,29 @@ test('a mid-round refusal does not spend the switch budget', async () => {
   }
   assert.equal(changed.length, 6, 'refusals did not count as tries');
   assert.equal(logs.some((l) => /will not come up/.test(l)), false, 'the table is not declared dead');
+});
+
+test('a refused switch waits its grace and plays the open table meanwhile', async () => {
+  const changed = [];
+  const clicks = [];
+  let clock = 1000;
+  const world = new World({ game: 'Blackjack', phase: 'playing', controls: ['Bet', 'Hit', 'Stand'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Wheel', rounds: 3 });
+  const c = new Controller({
+    world,
+    planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (l) => { clicks.push(l); return { ok: true, text: l }; }, getReport: () => ({}) },
+    tools: { run: async (name, args) => { if (name === 'change_game') { changed.push(args.game); return { ok: false, error: 'cannot change game mid-round' }; } return { ok: true }; } },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    now: () => clock,
+    log: () => {},
+    look: async () => 'Hit',
+  });
+  c._active = true;
+  for (let i = 0; i < 6; i++) { clock += 1000; await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } }); }
+  assert.equal(changed.length, 1, 'one attempt per grace window, not one per tick (measured 95 lines in 47 s)');
+  assert.ok(clicks.length >= 4, `the open table is played while waiting, got ${clicks.length}`);
 });
 
 test('a second wait on the same table is short', async () => {

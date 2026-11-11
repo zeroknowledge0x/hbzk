@@ -631,14 +631,14 @@ export class Controller {
     if (!zero.ok && !zero.skipped) return zero;
     this._snapshot = this._captureSnapshot();
     const worldState = this.world?.get?.() || {};
-    const gameName = worldState.phase === 'playing'
+    let gameName = worldState.phase === 'playing'
       ? worldState.game : (step.game || this.planner.status().goal?.game);
-    const adapter = byName(gameName);
+    let adapter = byName(gameName);
     if (!adapter || typeof adapter.decide !== 'function') return { ok: false, error: 'no per-game policy' };
     const controls = Array.isArray(worldState.controls) ? worldState.controls : [];
     // Progress is read from the board that is actually on screen (revealed gems, cleared
     // floors/lanes); the number of clicks is never used as proof.
-    const progress = readObservedProgress(gameName, { ...(worldState.report || {}), controls });
+    let progress = readObservedProgress(gameName, { ...(worldState.report || {}), controls });
     // Every table: the model sees the controls (compressed when the board is long) and names
     // one. A silent or illegal answer is a no-click. The measured policy is not a fallback,
     // because a random Hit/Stand/chip is what made the host play without looking.
@@ -661,38 +661,45 @@ export class Controller {
         const key = `${onScreen}->${planned}`;
         this._boardSwitches = this._boardSwitches || new Map();
         const entry = this._boardSwitches.get(key) || { tries: 0, at: 0 };
-        // A table change paints over seconds, not ticks. While the switch we just asked for is
-        // still in flight, stay quiet: four ticks in three seconds used to burn the whole budget
-        // and declare a working table dead (measured: Mines abandoned 3 s after the request).
-        if (entry.tries > 0 && this.now() - entry.at < this._switchGraceMs()) {
-          return { ok: false, deferred: true, error: `${planned} still loading` };
-        }
-        entry.tries += 1;
-        entry.at = this.now();
-        this._boardSwitches.set(key, entry);
-        if (entry.tries > 3) {
-          // The planned table will not come up. Playing the one that is actually open beats
-          // standing still on the stream.
-          this.log(`controller: ${planned} will not come up after ${entry.tries} tries — playing ${onScreen} instead`);
-          this._noteSettled();
-          this.planner?.setGoal?.({ kind: 'play', game: onScreen, rounds: 1 });
-          return { ok: false, deferred: true, error: 'planned table would not come up' };
-        }
-        this.log(`controller: board is ${onScreen}, not ${planned} — switching the table first`);
-        this._noteSettled();
-        const r = await this.tools.run('change_game', { game: planned });
-        if (r?.ok) return { ok: true, detail: r };
-        // The tools layer refuses a switch while it still sees a live round. That refusal costs
-        // nothing and is not a failed attempt: give the round a beat instead of burning the budget
-        // (measured: three 0 ms refusals, then the switch that navigated took 3.7 s).
-        if (/mid-round|in-round/i.test(String(r?.error || ''))) {
-          entry.tries = Math.max(0, entry.tries - 1);
+        // A table change paints over seconds, not ticks, and the tools layer refuses one while it
+        // still sees a live round. Both are waits, not failures: one attempt per grace window, and
+        // between attempts the host plays the table that is actually open instead of standing still
+        // (measured: an unthrottled retry logged 95 lines in 47 s and stopped all play clicks).
+        if (!entry.at || this.now() - entry.at >= this._switchGraceMs()) {
+          entry.at = this.now();
+          if (entry.tries === 0) {
+            this.log(`controller: board is ${onScreen}, not ${planned} — switching the table first`);
+          }
+          const r = await this.tools.run('change_game', { game: planned });
+          if (r?.ok) {
+            // Keep the entry: the page still has to paint, and the next tick must not fire a second
+            // navigation at it (that is how four ticks in three seconds used to be spent).
+            this._boardSwitches.set(key, entry);
+            this._noteSettled();
+            return { ok: true, detail: r };
+          }
+          if (/mid-round|in-round/i.test(String(r?.error || ''))) {
+            if (entry.tries === 0) this.log(`controller: ${planned} waits for the round to end — playing ${onScreen}`);
+          } else {
+            entry.tries += 1;
+            if (entry.tries > 3) {
+              this.log(`controller: ${planned} will not come up after ${entry.tries} tries — playing ${onScreen} instead`);
+              this._noteSettled();
+              this._boardSwitches.delete(key);
+              this.planner?.setGoal?.({ kind: 'play', game: onScreen, rounds: 1 });
+              return { ok: false, deferred: true, error: 'planned table would not come up' };
+            }
+          }
           this._boardSwitches.set(key, entry);
-          return { ok: false, deferred: true, error: `${planned} waits for the round to end` };
         }
-        return { ok: false, deferred: true, error: 'table switch failed' };
+        // Either the switch just ran or it is still waiting: play what is on the board, with that
+        // table's own adapter and progress — not the plan's.
+        gameName = onScreen;
+        adapter = byName(onScreen) || adapter;
+        progress = readObservedProgress(onScreen, { ...(worldState.report || {}), controls });
+      } else {
+        this._boardSwitches?.clear();
       }
-      this._boardSwitches?.clear();
       if (this._blockedGame !== gameName) {
         this._blockedGame = gameName;
         this._blocked = new Set();
