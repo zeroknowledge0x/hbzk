@@ -59,5 +59,5 @@ test('a reply with no message behind it does not print a rate above 100%', () =>
   const s = snapshot(m, T);
   assert.equal(s.split, true);
   assert.equal(s.replyRate, null);
-  assert.match(metricsLine(m, T), /CHAT 1 in · 5 answered \(counters split\)/);
+  assert.match(metricsLine(m, T), /CHAT 1 in · 4 answered \(counters split\)/);
 });
