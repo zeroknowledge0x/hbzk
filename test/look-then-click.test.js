@@ -581,6 +581,39 @@ test('a refused switch waits its grace and plays the open table meanwhile', asyn
   assert.ok(clicks.length >= 4, `the open table is played while waiting, got ${clicks.length}`);
 });
 
+test('a table with a working history is not declined by three bad reads', async () => {
+  const declined = [];
+  const logs = [];
+  const file = join(tmpdir(), `declined-wins-${Date.now()}.json`);
+  let status = { done: true, failed: false, goal: { game: 'Dice', rounds: 1 } };
+  const world = new World({ game: 'Dice', phase: 'idle', controls: ['Bet'], stake: 0 });
+  const c = new Controller({
+    world,
+    planner: { tick: () => ({ kind: 'await_result' }), settle: () => {}, status: () => status, setGoal: () => {} },
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async () => ({ ok: true }), getReport: () => ({}) },
+    tools: { run: async () => ({ ok: true }) },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    rotation: { decline: (name) => declined.push(name), playNow: () => {}, due: () => false, random: () => 'Keno', next: () => 'Keno' },
+    playable: ['Dice', 'Keno'],
+    declinedFile: file,
+    now: () => 1000,
+    log: (l) => logs.push(String(l)),
+    look: async () => 'Bet',
+  });
+  for (let i = 0; i < 3; i++) {
+    c._active = true;
+    status = { done: true, failed: false, goal: { game: 'Dice', rounds: 1 } };
+    await c.tick();
+  }
+  for (let i = 0; i < 3; i++) {
+    c._active = true;
+    status = { done: false, failed: true, error: 'await_result failed', goal: { game: 'Dice', rounds: 1 } };
+    await c.tick();
+  }
+  assert.deepEqual(declined, [], 'a table that has completed rounds keeps its place');
+  assert.equal(logs.some((l) => /off the rotation/.test(l)), false, logs.join(' | '));
+});
+
 test('a second wait on the same table is short', async () => {
   let clock = 0;
   const world = new World({ game: 'Dragon Tower', phase: 'idle', controls: ['Bet'], stake: 0 });

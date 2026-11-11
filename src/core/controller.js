@@ -63,6 +63,8 @@ export class Controller {
     this._repeatCount = 0;
     // Consecutive goals that failed for the same table (a result read that never arrived).
     this._goalFails = new Map();
+    // Goals that actually completed on that table this run.
+    this._goalWins = new Map();
     // The idle dial the model keeps turning, and how many times in a row.
     this._chipLabel = null;
     this._chipCount = 0;
@@ -474,13 +476,14 @@ export class Controller {
       const game = this.planner.status()?.goal?.game;
       const fails = (this._goalFails.get(game) || 0) + 1;
       this._goalFails.set(game, fails);
-      if (game && fails >= 3 && this.playable.has(String(game).toLowerCase())) {
-        // A table whose result cannot be read is a wasted round, not an unlucky one. Three in a
-        // row and it comes off this run's rotation, loudly — and off the next run's too.
+      const wins = this._goalWins.get(game) || 0;
+      // A table that reads its result once in a while is still a table that mostly cannot be read
+      // (Dice today: 14 completed / 45 failed). One lucky round must not buy it a whole evening.
+      if (game && fails >= 3 && wins <= 1 && this.playable.has(String(game).toLowerCase())) {
         this.playable.delete(String(game).toLowerCase());
         this.rotation?.decline?.(game);
-        saveDeclined(this._declinedFile, game, `${fails} result reads in a row`, this.now());
-        this.log(`controller: ${game} failed ${fails} result reads in a row — off the rotation until its sensor is fixed`);
+        saveDeclined(this._declinedFile, game, `${fails} result reads in a row after ${wins} completed`, this.now());
+        this.log(`controller: ${game} failed ${fails} result reads in a row (${wins} ever completed) — off the rotation until its sensor is fixed`);
         this._nextRoundAt = 0;
       }
       this.scratch = noteFailure(this.scratch, { step: this.scratch.task || 'round', error: st.error || 'unknown' });
@@ -503,7 +506,9 @@ export class Controller {
     if (st.done) {
       this._active = false;
       this._nextRoundAt = this.now() + this._dwell();
-      this._goalFails.set(this.planner.status()?.goal?.game, 0);
+      const game = this.planner.status()?.goal?.game;
+      this._goalFails.set(game, 0);
+      this._goalWins.set(game, (this._goalWins.get(game) || 0) + 1);
     }
   }
 
