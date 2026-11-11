@@ -1000,7 +1000,11 @@ setInterval(() => {
   const drift = alertLine(driftWatch, Date.now());
   if (drift !== 'DRIFT clean') {
     log(`${drift} · slowest stage ${slowestStage(mouthLatency)}`);
-    if (/stuck-loop|capture-stall/.test(drift)) controller.rotation?.playNow?.();
+    // Drift never forces a rotation once more (see Rotation.driftResponse): only a capture stall
+    // asks the capture layer to re-arm, and the table stays where it is.
+    if (Rotation.driftResponse(drift) === 'rearm-capture') {
+      Promise.resolve(game.reviveCapture?.({ timeoutMs: 5000 })).catch(() => null);
+    }
     for (const kind of ['stuck-loop', 'encoder-drift', 'capture-stall']) driftWatch = clearKind(driftWatch, kind);
   }
   log(`hubie: ${playbookLine(playbook)} · ${latencyLine(mouthLatency)}`);

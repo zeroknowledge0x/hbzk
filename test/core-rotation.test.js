@@ -234,6 +234,12 @@ describe('Rotation', () => {
       for (const name of seen) assert.ok(['Dice', 'Mines', 'Plinko'].includes(name));
     });
 
+    it('a drift alert never forces a rotation', () => {
+      assert.equal(Rotation.driftResponse('DRIFT stuck-loop · slowest stage unknown'), 'log-only');
+      assert.equal(Rotation.driftResponse('DRIFT encoder-drift · slowest stage tts'), 'log-only');
+      assert.equal(Rotation.driftResponse('DRIFT capture-stall · slowest stage capture'), 'rearm-capture');
+    });
+
     it('a declined table never comes back from random()', () => {
       const rot = makeRotation();
       rot.decline('dice');

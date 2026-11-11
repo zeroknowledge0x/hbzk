@@ -70,9 +70,11 @@ export class Controller {
     this._chipCount = 0;
     // Clicks spent on the current step without it ever settling.
     this._stepClicks = 0;
-    // Tables declined earlier today, read back from disk so a restart does not re-offer them.
-    this._declinedFile = declinedFile || 'data/declined.json';
-    this._declined = loadDeclined(this._declinedFile, this.now());
+    // Tables declined earlier today, read back from disk so a restart does not re-offer them. The
+    // path comes from the caller: with no path the controller neither reads nor writes one, so a
+    // test can never inherit the runtime state of a running stream.
+    this._declinedFile = declinedFile || null;
+    this._declined = this._declinedFile ? loadDeclined(this._declinedFile, this.now()) : new Map();
     this._declinedApplied = false;
   }
 
@@ -482,7 +484,7 @@ export class Controller {
       if (game && fails >= 3 && wins <= 1 && this.playable.has(String(game).toLowerCase())) {
         this.playable.delete(String(game).toLowerCase());
         this.rotation?.decline?.(game);
-        saveDeclined(this._declinedFile, game, `${fails} result reads in a row after ${wins} completed`, this.now());
+        if (this._declinedFile) saveDeclined(this._declinedFile, game, `${fails} result reads in a row after ${wins} completed`, this.now());
         this.log(`controller: ${game} failed ${fails} result reads in a row (${wins} ever completed) — off the rotation until its sensor is fixed`);
         this._nextRoundAt = 0;
       }

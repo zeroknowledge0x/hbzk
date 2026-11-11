@@ -68,6 +68,14 @@ export class Rotation {
     this._playNow = true;
   }
 
+  // The drift watch is a measurement, not a steering wheel. A `stuck-loop` alert is usually a legal
+  // repeat on a one-button table (the detector counting `Bet` on a table that only has `Bet`), and
+  // rotating on it is how the designed 10–60 min dwell collapsed to about a minute — measured
+  // 2026-11-11: 253 of 402 rotations in one day followed a stuck-loop line within 20 s.
+  static driftResponse(kind) {
+    return /capture-stall/i.test(String(kind)) ? 'rearm-capture' : 'log-only';
+  }
+
   // A table whose result cannot be read comes off the pool for the rest of the run. The log line
   // that calls this must say which table and why — declining quietly is not allowed.
   decline(name) {
