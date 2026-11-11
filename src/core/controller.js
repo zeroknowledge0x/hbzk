@@ -56,6 +56,8 @@ export class Controller {
     // One label clicked over and over is a click bot, not a host. This counts it per round.
     this._repeatLabel = null;
     this._repeatCount = 0;
+    // Consecutive goals that failed for the same table (a result read that never arrived).
+    this._goalFails = new Map();
   }
 
   _roundLive(now = this.now()) {
@@ -414,6 +416,17 @@ export class Controller {
     if (st.failed) {
       this._active = false;
       this._nextRoundAt = this.now() + this._dwell();
+      const game = this.planner.status()?.goal?.game;
+      const fails = (this._goalFails.get(game) || 0) + 1;
+      this._goalFails.set(game, fails);
+      if (game && fails >= 3 && this.playable.has(String(game).toLowerCase())) {
+        // A table whose result cannot be read is a wasted round, not an unlucky one. Three in a
+        // row and it comes off this run's rotation, loudly.
+        this.playable.delete(String(game).toLowerCase());
+        this.rotation?.decline?.(game);
+        this.log(`controller: ${game} failed ${fails} result reads in a row — off the rotation until its sensor is fixed`);
+        this._nextRoundAt = 0;
+      }
       this.scratch = noteFailure(this.scratch, { step: this.scratch.task || 'round', error: st.error || 'unknown' });
       this.log(`controller: plan failed (${st.error})`);
       if (exhausted(this.scratch)) {
@@ -434,6 +447,7 @@ export class Controller {
     if (st.done) {
       this._active = false;
       this._nextRoundAt = this.now() + this._dwell();
+      this._goalFails.set(this.planner.status()?.goal?.game, 0);
     }
   }
 

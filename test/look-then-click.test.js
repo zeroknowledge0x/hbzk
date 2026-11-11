@@ -362,6 +362,35 @@ test('a plan for another table is not clicked, and a table that will not load is
   assert.equal(goals.at(-1).game, 'Hilo', 'a table that will not come up is dropped for the open one');
 });
 
+test('a table whose result cannot be read comes off the rotation after three tries', async () => {
+  const logs = [];
+  const declined = [];
+  const world = new World({ game: 'Dice', phase: 'idle', controls: ['Bet'], stake: 0 });
+  const failing = {
+    tick: () => ({ kind: 'await_result', fallback: null }),
+    settle: () => {},
+    status: () => ({ failed: true, error: 'await_result failed after re-entering Dice', goal: { game: 'Dice', rounds: 3 } }),
+    setGoal: () => {},
+  };
+  let clock = 1000;
+  const c = new Controller({
+    world,
+    planner: failing,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async () => ({ ok: true }), getReport: () => ({}) },
+    tools: { run: async () => ({ ok: true }) },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    rotation: { decline: (name) => declined.push(name), playNow: () => {}, due: () => false },
+    playable: ['Dice', 'Keno'],
+    now: () => clock,
+    log: (line) => logs.push(String(line)),
+    look: async () => 'Bet',
+  });
+  for (let i = 0; i < 3; i++) { await c.tick(); clock += 60000; }
+  assert.deepEqual(declined, ['Dice'], 'the rotation is told, not just the controller');
+  assert.equal(c.playable.has('dice'), false, 'the table is no longer offered to the plan');
+  assert.ok(logs.some((l) => /Dice failed 3 result reads in a row/.test(l)), logs.join(' | '));
+});
+
 test('a second wait on the same table is short', async () => {
   let clock = 0;
   const world = new World({ game: 'Dragon Tower', phase: 'idle', controls: ['Bet'], stake: 0 });

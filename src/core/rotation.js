@@ -68,6 +68,18 @@ export class Rotation {
     this._playNow = true;
   }
 
+  // A table whose result cannot be read comes off the pool for the rest of the run. The log line
+  // that calls this must say which table and why — declining quietly is not allowed.
+  decline(name) {
+    const want = String(name || '').trim().toLowerCase();
+    if (!want) return this.playable.size;
+    for (const entry of [...this.playable]) {
+      if (String(entry).trim().toLowerCase() === want) this.playable.delete(entry);
+    }
+    this._playNow = true;
+    return this.playable.size;
+  }
+
   arm(timerFactory) {
     if (typeof timerFactory !== 'function') { this._save(); return null; }
     if (this._timer) {

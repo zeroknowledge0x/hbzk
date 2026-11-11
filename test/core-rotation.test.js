@@ -233,5 +233,14 @@ describe('Rotation', () => {
       assert.ok(seen.size >= 2, [...seen].join(','));
       for (const name of seen) assert.ok(['Dice', 'Mines', 'Plinko'].includes(name));
     });
+
+    it('a declined table never comes back from random()', () => {
+      const rot = makeRotation();
+      rot.decline('dice');
+      assert.ok(rot.due(), 'declining asks for the next table right away');
+      const seen = new Set();
+      for (let i = 0; i < 40; i++) seen.add(rot.random());
+      assert.equal(seen.has('Dice'), false, [...seen].join(','));
+    });
   });
 });
