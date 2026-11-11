@@ -54,11 +54,16 @@ export function median(values = []) {
 
 export function snapshot(m, now = Date.now()) {
   const answered = m.replies;
+  // A reply is sometimes made with no inbound message behind it (a greeting, an owner line), so
+  // replies can exceed messages. A rate above 100% is a split counter, not a score: report it as
+  // unknown rather than printing a number nobody can act on.
+  const split = answered > m.messages;
   return {
     messages: m.messages,
     replies: answered,
     scams: m.scams,
-    replyRate: m.messages ? Number((answered / m.messages).toFixed(3)) : null,
+    split,
+    replyRate: m.messages > 0 && !split ? Number((answered / m.messages).toFixed(3)) : null,
     latencyMs: median(m.latenciesMs),
     unanswered: m.unanswered.length,
     minutes: m.firstAt ? Math.round((now - m.firstAt) / 60_000) : 0,
@@ -67,7 +72,9 @@ export function snapshot(m, now = Date.now()) {
 
 export function metricsLine(m, now = Date.now()) {
   const s = snapshot(m, now);
-  const rate = s.replyRate === null ? '—' : `${Math.round(s.replyRate * 100)}%`;
+  const rate = s.replyRate !== null
+    ? `${Math.round(s.replyRate * 100)}%`
+    : (s.split ? 'counters split' : '—');
   const lat = s.latencyMs === null ? '—' : `${(s.latencyMs / 1000).toFixed(1)}s`;
   return `CHAT ${s.messages} in · ${s.replies} answered (${rate}) · ${lat} · ${s.unanswered} missed`;
 }
