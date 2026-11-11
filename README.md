@@ -4,6 +4,8 @@
 **demo mode** (stake 0), talks to Kick chat, and streams a 1280×720 overlay with
 voice. After navigation, the controller waits briefly for a recognizable table
 before attempting a play click; an unresolved identity enters planner recovery.
+For Dice, choosing a direction is a preset, not a completed demo round; the model
+must select a start control to advance.
 
 Contest: https://www.housebets.com/contests/hubie-streamer
 

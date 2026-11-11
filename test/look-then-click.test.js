@@ -671,6 +671,24 @@ test('an unknown playing table eventually fails rather than waiting forever', as
   assert.notEqual(result.deferred, true, 'the planner can recover after the bounded wait');
 });
 
+test('Dice direction selection does not settle the start step before Bet', async () => {
+  const world = new World({ game: 'Dice', phase: 'idle', controls: ['Bet', 'Outside'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Dice', rounds: 1 });
+  const clicked = [];
+  let choice = 'Outside';
+  const c = new Controller({ world, planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (label) => { clicked.push(label); return { ok: true, text: label }; }, getReport: () => ({}) },
+    tools: { run: async () => ({ ok: true }) }, verifier: { waitFor: async () => ({ ok: false }) }, log: () => {}, look: async () => choice });
+  const step = { kind: 'start_round', args: { label: 'Bet' } };
+  const preset = await c._executeStep(step);
+  assert.equal(preset.deferred, true, 'a direction selection is not a started round');
+  choice = 'Bet';
+  const bet = await c._executeStep(step);
+  assert.equal(bet.ok, true);
+  assert.deepEqual(clicked, ['Outside', 'Bet']);
+});
+
 test('a second wait on the same table is short', async () => {
   let clock = 0;
   const world = new World({ game: 'Dragon Tower', phase: 'idle', controls: ['Bet'], stake: 0 });

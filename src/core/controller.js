@@ -859,6 +859,9 @@ export class Controller {
       // Taking a bet off the table is the one click that ends a round instead of starting one.
       this._noteBet(raw.text || label);
       this._noteRepeat(raw.text || label);
+      if (byName(gameName)?.name === 'Dice' && /^(?:over|under|inside|outside)(?:\s|$)/i.test(String(label).trim())) {
+        return { ok: false, deferred: true, error: 'Dice direction selected; waiting for Bet' };
+      }
       return { ok: true, detail: raw };
     }
     const raw = await this.tools.run('click', { label });
