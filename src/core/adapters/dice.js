@@ -74,7 +74,12 @@ export default {
   settings: SETTINGS,
   startLabels: START_LABELS,
   pick: null,
-  resolvesAtZero: true,
+  // Measured 2026-11-11: at stake 0 Dice's result marker is read in only 14 of 59 goals (24%). The
+  // Bet click always lands, so the table plays fine — it is the *result wait* that failed and
+  // produced every `goal failed ... await_result failed after re-entering Dice` line (two 8 s
+  // timeouts plus a re-entry, ~30–60 s per visit). Dice is played as a demo click like the other
+  // ten tables: click its own controls, do not wait for a result that may never publish.
+  resolvesAtZero: false,
 
   async configure(tools, want) {
     const applied = [];

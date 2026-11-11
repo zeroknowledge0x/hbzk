@@ -35,7 +35,11 @@ test('blackjack and hilo expose in-round labels, keno/mines pick spots', () => {
   assert.equal(byName('Keno').pick, 'number');
   assert.equal(byName('Mines').pick, 'tile');
   assert.equal(byName('Dragon Tower').pick, 'tile');
-  assert.equal(byName('Dice').resolvesAtZero, true);
+  // No table claims a zero-stake result any more. Dice was the last one and its sensor read 14 of
+  // 59 goals today (24%): the Bet click always worked, the `await_result` wait is what failed and
+  // produced every `goal failed` line. A table that cannot be read is played as a demo click, like
+  // the other ten.
+  assert.equal(ALL.filter((a) => a.resolvesAtZero === true).length, 0);
   assert.equal(byName('Blackjack').resolvesAtZero, false);
   assert.equal(byName('Hilo').pick, null);
   for (const a of ALL) {
