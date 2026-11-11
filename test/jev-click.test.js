@@ -6,11 +6,11 @@ import { Jev } from '../src/jev.js';
 
 function jevWith(answer) {
   const jev = new Jev({ jevEnabled: true, jevKey: 'k' });
-  globalThis.fetch = async () => ({
-    ok: true,
-    status: 200,
-    json: async () => ({ answers: { click: answer } }),
-  });
+  jev.sent = null;
+  globalThis.fetch = async (_url, init) => {
+    jev.sent = JSON.parse(init.body);
+    return { ok: true, status: 200, json: async () => ({ answers: { click: answer } }) };
+  };
   return jev;
 }
 
@@ -32,6 +32,16 @@ test('a low-confidence answer and a "none" answer both defer instead of clicking
 
   const none = jevWith({ choice: 'none', confidence: 0.68, probabilities: { none: 0.68, Hit: 0.25, Stand: 0.02 } });
   assert.equal(await none.chooseClick({ game: 'Blackjack', phase: 'playing', controls: ['Hit', 'Stand'] }), null);
+});
+
+test('the classifier is told which click the round stopped answering', async () => {
+  const jev = jevWith({ choice: 'Cash out 2.40x', confidence: 0.5, probabilities: { none: 0.2, 'Cash out 2.40x': 0.6 } });
+  const hit = await jev.chooseClick({
+    game: 'Mines', phase: 'playing', controls: ['Cash out 2.40x'],
+    repeats: { label: 'random tile', count: 9 },
+  });
+  assert.equal(hit.label, 'Cash out 2.40x');
+  assert.match(jev.sent.state, /Already clicked "random tile" 9 times/);
 });
 
 test('an empty board and a dead classifier are both a no-answer', async () => {

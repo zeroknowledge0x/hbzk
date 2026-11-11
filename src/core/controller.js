@@ -48,6 +48,9 @@ export class Controller {
     this._betAt = 0;
     this._betCapMs = Number(process.env.HUBIE_BET_CAP_MS) > 0 ? Number(process.env.HUBIE_BET_CAP_MS) : 45000;
     this._deferredGame = null;
+    // One label clicked over and over is a click bot, not a host. This counts it per round.
+    this._repeatLabel = null;
+    this._repeatCount = 0;
   }
 
   _roundLive(now = this.now()) {
@@ -57,7 +60,14 @@ export class Controller {
 
   _noteBet() { this._betAt = this.now(); }
 
-  _noteSettled() { this._betAt = 0; this._fallbackHolds = 0; }
+  _noteSettled() { this._betAt = 0; this._fallbackHolds = 0; this._repeatLabel = null; this._repeatCount = 0; }
+
+  _noteRepeat(label) {
+    const key = String(label || '').toLowerCase();
+    if (!key) return;
+    if (key === this._repeatLabel) this._repeatCount += 1;
+    else { this._repeatLabel = key; this._repeatCount = 1; }
+  }
 
   // 6-15 s, the same band the quiet-talk timer uses for a human beat.
   _dwell() { return 6000 + Math.floor(this.random() * 9000); }
@@ -549,6 +559,14 @@ export class Controller {
         this._blocked = new Set();
       }
       if (this._blocked?.size) live = live.filter((label) => !this._blocked.has(String(label).toLowerCase()));
+      // A round that stops responding to the same click looks like a bot. The model is told how
+      // many times it has already spent that click, and the label stops being offered at ten.
+      const repeats = this._repeatCount >= 3 && this._repeatLabel
+        ? { label: this._repeatLabel, count: this._repeatCount }
+        : null;
+      if (this._repeatCount >= 10 && this._repeatLabel) {
+        live = live.filter((label) => String(label).toLowerCase() !== this._repeatLabel);
+      }
       const offered = compressControls(legalControls(live));
       if (!offered.length) {
         this.log('controller: table not ready (no play control yet)');
@@ -556,7 +574,7 @@ export class Controller {
       }
       let pick = null;
       try {
-        pick = await this.look({ game: gameName, phase: worldState.phase, controls: offered, progress, seen });
+        pick = await this.look({ game: gameName, phase: worldState.phase, controls: offered, progress, seen, repeats });
       } catch (err) {
         this.log(`controller: look failed (${err?.message || err})`);
         return { ok: false, error: 'look failed' };
@@ -658,12 +676,14 @@ export class Controller {
       this.notifyAction?.(String(label));
       // Taking a bet off the table is the one click that ends a round instead of starting one.
       if (!/^cash out/i.test(String(label))) this._noteBet();
+      this._noteRepeat(raw.text || label);
       return { ok: true, detail: raw };
     }
     const raw = await this.tools.run('click', { label });
     if (raw?.ok) {
       await this._snapPlay(raw.text || label);
       if (!/^cash out/i.test(String(label))) this._noteBet();
+      this._noteRepeat(raw.text || label);
     }
     return raw;
   }

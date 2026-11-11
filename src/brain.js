@@ -144,7 +144,7 @@ export class Brain {
 
   // The click, for every table. The model sees the compressed control list and names one.
   // A miss, a refusal, or a dead provider is null — the caller must not click at random.
-  async chooseClick({ game, phase, controls, progress, seen } = {}) {
+  async chooseClick({ game, phase, controls, progress, seen, repeats } = {}) {
     if (this.offline) return null;
     const offered = Array.isArray(controls) ? controls.filter(Boolean) : [];
     if (!offered.length) return null;
@@ -158,7 +158,7 @@ export class Brain {
         },
         {
           role: 'user',
-          content: `TABLE ${game || 'unknown'} phase=${phase || 'unknown'} progress=${Number(progress) || 0}${note ? `\nON SCREEN: ${note}` : ''}\nCONTROLS:\n${offered.map((label, i) => `${i + 1}. ${label}`).join('\n')}\nAnswer with the label FIRST, alone on line 1, copied from the list — or the single word none. Nothing else on line 1.`,
+          content: `TABLE ${game || 'unknown'} phase=${phase || 'unknown'} progress=${Number(progress) || 0}${note ? `\nON SCREEN: ${note}` : ''}${repeats ? `\nALREADY CLICKED: "${String(repeats.label).slice(0, 40)}" ${Number(repeats.count) || 0} times this round and it has not ended — do not pick it again; cash out or a different control is how the round ends.` : ''}\nCONTROLS:\n${offered.map((label, i) => `${i + 1}. ${label}`).join('\n')}\nAnswer with the label FIRST, alone on line 1, copied from the list — or the single word none. Nothing else on line 1.`,
         },
       ], { maxTokens: 300, temperature: 0, timeoutMs: 15000, joinReasoning: true, model: this.cfg.llmDecisionModel || this.cfg.llmModel });
     } catch (err) {

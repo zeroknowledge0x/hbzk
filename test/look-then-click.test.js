@@ -258,6 +258,40 @@ test('a fallback held by the same bet leaves the table instead of spinning', asy
   assert.equal(third.ok, true);
 });
 
+test('a label the round stopped answering is no longer offered to the model', async () => {
+  const seenViews = [];
+  let clock = 900000;
+  const world = new World({ game: 'Mines', phase: 'playing', controls: ['Random tile', 'Tile 1', 'Cash out 2.40x'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Mines', rounds: 1 });
+  const c = new Controller({
+    world,
+    planner,
+    game: {
+      setStake: async () => ({ ok: true, verified: true, observed: 0 }),
+      clickText: async (label) => ({ ok: true, text: label }),
+      getReport: () => ({ url: '' }),
+    },
+    tools: { run: async () => ({ ok: false }) },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    random: () => 0,
+    now: () => clock,
+    log: () => {},
+    look: async (view) => { seenViews.push(view); return 'Random tile'; },
+  });
+  for (let i = 0; i < 12; i++) {
+    clock += 2000;
+    await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
+  }
+  const withRepeat = seenViews.find((v) => v.repeats);
+  assert.ok(withRepeat, 'the model is told how many times it has spent that click');
+  assert.equal(withRepeat.repeats.label, 'random tile');
+  assert.ok(withRepeat.repeats.count >= 3);
+  const last = seenViews.at(-1);
+  assert.equal(last.controls.includes('Random tile'), false, 'a dead click is dropped from the board');
+  assert.ok(last.controls.includes('Cash out 2.40x'), 'the way out of the round is still offered');
+});
+
 test('a second wait on the same table is short', async () => {
   let clock = 0;
   const world = new World({ game: 'Dragon Tower', phase: 'idle', controls: ['Bet'], stake: 0 });

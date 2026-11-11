@@ -69,7 +69,7 @@ export class Jev {
 
   // The click decision: one label out of the ones that are on the table right now.
   // Null on any failure or an unsure answer, so the caller can fall through to the LLM.
-  async chooseClick({ game, phase, controls, progress, seen } = {}) {
+  async chooseClick({ game, phase, controls, progress, seen, repeats } = {}) {
     const offered = (Array.isArray(controls) ? controls : [])
       .map((label) => String(label || '').replace(/\s+/g, ' ').trim())
       .filter((label) => label && !label.startsWith('…'));
@@ -79,6 +79,7 @@ export class Jev {
     const state = [
       `Table ${game || 'unknown'} phase=${phase || 'unknown'} progress=${Number(progress) || 0}`,
       seen ? `On screen: ${clip(seen, 200)}` : '',
+      repeats ? `Already clicked "${clip(repeats.label, 40)}" ${Number(repeats.count) || 0} times this round and it has not ended — do not pick it again.` : '',
       'Controls on the table right now:',
       ...offered.map((label) => `- ${clip(label, 60)}`),
     ].filter(Boolean).join('\n');
