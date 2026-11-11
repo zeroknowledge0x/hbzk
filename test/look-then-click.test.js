@@ -641,6 +641,36 @@ test('play now starts a round on the open table without rotating', async () => {
   assert.equal(goals.at(-1)?.rounds, 1, 'and it is not treated as a rotation');
 });
 
+test('a changing table with an unknown playing game waits for perception', async () => {
+  const world = new World({ game: null, phase: 'playing', controls: ['Bet'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Plinko', rounds: 3 });
+  let clicks = 0;
+  const c = new Controller({ world, planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async () => { clicks++; return { ok: true }; }, getReport: () => ({}) },
+    tools: { run: async () => ({ ok: true }) }, verifier: { waitFor: async () => ({ ok: false }) },
+    log: () => {}, look: async () => 'Bet' });
+  const result = await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
+  assert.equal(result.deferred, true, 'unknown table during perception refresh is a wait, not plan failure');
+  assert.equal(clicks, 0, 'do not click an unidentified in-progress table');
+});
+
+test('an unknown playing table eventually fails rather than waiting forever', async () => {
+  let now = 1000;
+  const world = new World({ game: null, phase: 'playing', controls: ['Bet'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Plinko', rounds: 1 });
+  const c = new Controller({ world, planner, now: () => now,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), getReport: () => ({}) },
+    tools: { run: async () => ({ ok: true }) }, verifier: { waitFor: async () => ({ ok: false }) }, log: () => {}, look: async () => 'Bet' });
+  const step = { kind: 'start_round', args: { label: 'Bet' } };
+  assert.equal((await c._executeStep(step)).deferred, true);
+  now += 12001;
+  const result = await c._executeStep(step);
+  assert.equal(result.ok, false);
+  assert.notEqual(result.deferred, true, 'the planner can recover after the bounded wait');
+});
+
 test('a second wait on the same table is short', async () => {
   let clock = 0;
   const world = new World({ game: 'Dragon Tower', phase: 'idle', controls: ['Bet'], stake: 0 });

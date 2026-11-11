@@ -648,7 +648,17 @@ export class Controller {
     let gameName = worldState.phase === 'playing'
       ? worldState.game : (step.game || this.planner.status().goal?.game);
     let adapter = byName(gameName);
-    if (!adapter || typeof adapter.decide !== 'function') return { ok: false, error: 'no per-game policy' };
+    // A route change may temporarily leave the perceived game unknown while the page still looks
+    // in-round. Wait for identity rather than failing the plan or clicking an unidentified table.
+    if (!adapter) {
+      const now = this.now();
+      if (this._unknownTableSince == null) this._unknownTableSince = now;
+      if (now - this._unknownTableSince < 12000) return { ok: false, deferred: true, error: 'waiting for table identity' };
+      this._unknownTableSince = null;
+      return { ok: false, error: 'table identity unavailable after 12s' };
+    }
+    this._unknownTableSince = null;
+    if (typeof adapter.decide !== 'function') return { ok: false, error: 'no per-game policy' };
     const controls = Array.isArray(worldState.controls) ? worldState.controls : [];
     // Progress is read from the board that is actually on screen (revealed gems, cleared
     // floors/lanes); the number of clicks is never used as proof.

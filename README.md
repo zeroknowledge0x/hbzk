@@ -2,7 +2,8 @@
 
 24/7 AI streamer for **Housebets Contest Labs**. Hubie plays House Originals in
 **demo mode** (stake 0), talks to Kick chat, and streams a 1280×720 overlay with
-voice.
+voice. After navigation, the controller waits briefly for a recognizable table
+before attempting a play click; an unresolved identity enters planner recovery.
 
 Contest: https://www.housebets.com/contests/hubie-streamer
 
