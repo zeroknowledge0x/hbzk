@@ -9,6 +9,7 @@ import { labelMatchesPlay } from './play-labels.js';
 import { kenoNumbers, readObservedProgress } from './progress.js';
 import { cashoutLine } from './play-talk.js';
 import { createScratch, exhausted, noteFailure, noteSuccess, openTask } from './reflexion.js';
+import { boardTable } from './play-labels.js';
 import { compressControls, legalControls, pickFromReply, resolveLookedClick, withBudget } from './look-then-click.js';
 
 // A click that puts a bet on the table. Direction presets, mode toggles, tiles and in-round
@@ -444,7 +445,18 @@ export class Controller {
       case 'enter_game': {
         if (this._roundLive()) {
           const actual = this.world?.get?.()?.game;
-          if (byName(actual)?.name !== byName(step.args?.game)?.name) {
+          const same = byName(actual)?.name === byName(step.args?.game)?.name;
+          // The table name can come from the page URL while the board on screen is still the
+          // previous table. If the controls belong to another table, the switch is real — the
+          // round that is "live" belongs to a table the host is not playing.
+          const onScreen = boardTable(this.world?.get?.()?.controls);
+          if (same && onScreen && byName(onScreen)?.name !== byName(step.args?.game)?.name) {
+            this.log(`controller: ${step.args?.game} is not on screen (found ${onScreen}) — switching anyway`);
+            const away = await this.tools.run('change_game', step.args);
+            if (away?.ok) this._noteSettled();
+            return away;
+          }
+          if (!same) {
             // A fallback that the same live bet keeps holding is a dead table, not a round in
             // progress. Without this the planner spins on the table until the bet cap expires.
             if (step.fallback) {
@@ -563,6 +575,15 @@ export class Controller {
         const fresh = (snap?.clickables || []).map((item) => String(item?.text || '').trim()).filter(Boolean);
         if (fresh.length) live = fresh;
         seen = String(snap?.dialogText || '').slice(0, 240);
+      }
+      // Never click a board that belongs to another table: the page URL can say Dice while the
+      // screen still shows the previous table, and those coordinates are not the plan's table.
+      const onScreen = boardTable(live);
+      if (onScreen && gameName && byName(onScreen)?.name !== byName(gameName)?.name) {
+        this.log(`controller: board is ${onScreen}, not ${gameName} — switching the table first`);
+        this._noteSettled();
+        const r = await this.tools.run('change_game', { game: gameName });
+        return r?.ok ? { ok: true, detail: r } : { ok: false, deferred: true, error: 'table switch failed' };
       }
       if (this._blockedGame !== gameName) {
         this._blockedGame = gameName;

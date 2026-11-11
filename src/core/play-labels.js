@@ -29,6 +29,26 @@ export const PLAY_CLICK_LABELS = [
 
 export const IN_ROUND_LABELS = ['Hit', 'Stand', 'Higher', 'Lower', 'Cash out', 'Random pick'];
 
+// What gives a table away on screen. "Bet" is on every table, so these are labels only one table
+// shows. Measured on Housebets House Games (2026-11-08).
+const TABLE_TELL = [
+  ['Dice', [/\bover\b/i, /\bunder\b/i, /^inside$/i, /^outside$/i]],
+  ['Hilo', [/^higher\b/i, /^lower\b/i, /^skip$/i]],
+  ['Blackjack', [/^hit$/i, /^stand$/i, /^no thanks$/i]],
+  ['Dragon Tower', [/^random pick\b/i, /^pick floor\b/i]],
+  ["Hubie's Road", [/^go$/i]],
+  ['Keno', [/^auto pick$/i]],
+];
+
+// Which table is really in front of the host, judged from the controls alone. The page URL can say
+// one table while the board still shows the previous one. null means "no idea" — callers must not
+// read that as a mismatch.
+export function boardTable(controls = []) {
+  const list = (controls || []).map((c) => String(c));
+  const hit = TABLE_TELL.find(([, tells]) => list.some((c) => tells.some((re) => re.test(c))));
+  return hit ? hit[0] : null;
+}
+
 export function inferPhase(controls = []) {
   const list = (controls || []).map((c) => String(c).toLowerCase().replace(/\s+/g, ' ').trim());
   const has = (re) => list.some((c) => re.test(c));

@@ -314,6 +314,31 @@ test('a direction preset does not hold the table, a bet does', async () => {
   assert.equal(c._roundLive(), true, 'a bet on the table holds it');
 });
 
+test('a board showing another table is switched, never clicked', async () => {
+  const changed = [];
+  const world = new World({ game: 'Dice', phase: 'idle', controls: ['Bet', 'Random pick', 'Pick floor 4, tile 1'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Dice', rounds: 1 });
+  const c = new Controller({
+    world,
+    planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (l) => ({ ok: true, text: l }), getReport: () => ({}) },
+    tools: { run: async (name, args) => { if (name === 'change_game') { changed.push(args.game); return { ok: true }; } return { ok: true }; } },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    now: () => 1000,
+    log: () => {},
+    look: async () => 'Random pick',
+  });
+  // The URL says Dice, the board is Dragon Tower's: the plan's table must be re-entered, not clicked.
+  const step = await c._executeStep({ kind: 'enter_game', args: { game: 'Dice' } });
+  assert.deepEqual(changed, ['Dice']);
+
+  changed.length = 0;
+  world.set('game', 'Dice');
+  await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
+  assert.deepEqual(changed, ['Dice'], 'the tile board is not clicked, Dice is opened instead');
+});
+
 test('a second wait on the same table is short', async () => {
   let clock = 0;
   const world = new World({ game: 'Dragon Tower', phase: 'idle', controls: ['Bet'], stake: 0 });
