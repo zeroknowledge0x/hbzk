@@ -65,7 +65,7 @@ test('a looked click is the label the model named, and only if it is on the tabl
 test('chrome and stake traps are not offered to the model', () => {
   const offered = legalControls([
     'Hit', 'Stand', 'Wallet', 'Bet Amount 0.00', '2× Double bet amount (S)',
-    'IDR 99,674', 'Weekly Prize', 'Search', 'Account', 'Hit anyway', 'Live stats', 'Advanced', 'Instant autobet', 'Switch to Roll Under', 'Switch to Inside range', 'Casino Lobby',
+    'IDR 99,674', 'Weekly Prize', 'Search', 'Account', 'Hit anyway', 'Live stats', 'Advanced', 'Instant autobet', 'Switch to Roll Under', 'Switch to Inside range', 'Casino Lobby', 'Rewards Bronze', 'More games',
   ]);
   assert.deepEqual(offered, ['Hit', 'Stand', 'Hit anyway']);
   assert.deepEqual(legalControls(['Bet', 'Manual', 'Auto', 'Add to favorites']), ['Bet']);
