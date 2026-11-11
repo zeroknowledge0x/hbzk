@@ -60,17 +60,23 @@ test('isFrameBlack is true for a black canvas and false for a bright one', () =>
   assert.equal(isFrameBlack(null), true);
 });
 
-test('ops apply play_now calls rotation.playNow', async () => {
-  let n = 0;
+test('ops play_now plays the open table, cycle_table rotates', async () => {
+  let rotations = 0;
+  let played = 0;
   const ops = new OpsLoop({
-    rotation: { playNow() { n += 1; } },
+    rotation: { playNow() { rotations += 1; } },
+    controller: { playNowTable() { played += 1; } },
     log() {},
     world: { get: () => ({}) },
   });
-  await ops.apply({ do: 'play_now', why: 'test' });
-  assert.equal(n, 1);
+  await ops.apply({ do: 'play_now', why: 'idle 14s' });
+  assert.equal(played, 1);
+  assert.equal(rotations, 0, 'asking for play is not asking for a new table');
+  await ops.apply({ do: 'cycle_table', why: 'variety' });
+  assert.equal(rotations, 1);
   await ops.apply({ do: 'noop' });
-  assert.equal(n, 1);
+  assert.equal(played, 1);
+  assert.equal(rotations, 1);
 });
 
 test('ops apply click only hits a visible play label', async () => {

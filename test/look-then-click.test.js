@@ -614,6 +614,33 @@ test('a table with a working history is not declined by three bad reads', async 
   assert.equal(logs.some((l) => /off the rotation/.test(l)), false, logs.join(' | '));
 });
 
+test('play now starts a round on the open table without rotating', async () => {
+  const goals = [];
+  const world = new World({ game: 'Hilo', phase: 'idle', controls: ['Bet'], stake: 0 });
+  const planner = new Planner({ world });
+  const realSetGoal = planner.setGoal.bind(planner);
+  planner.setGoal = (g) => { goals.push(g); return realSetGoal(g); };
+  const c = new Controller({
+    world,
+    planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (l) => ({ ok: true, text: l }), getReport: () => ({}) },
+    tools: { run: async () => ({ ok: true }) },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    rotation: { due: () => false, random: () => { throw new Error('must not rotate'); }, next: () => { throw new Error('must not rotate'); } },
+    playable: ['Hilo'],
+    now: () => 1000,
+    log: () => {},
+    look: async () => 'Bet',
+  });
+  c._nextRoundAt = 99999;
+  await c.tick();
+  assert.equal(goals.length, 0, 'the dwell still holds');
+  c.playNowTable();
+  await c.tick();
+  assert.equal(goals.at(-1)?.game, 'Hilo', 'the open table is played');
+  assert.equal(goals.at(-1)?.rounds, 1, 'and it is not treated as a rotation');
+});
+
 test('a second wait on the same table is short', async () => {
   let clock = 0;
   const world = new World({ game: 'Dragon Tower', phase: 'idle', controls: ['Bet'], stake: 0 });

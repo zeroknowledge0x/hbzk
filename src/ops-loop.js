@@ -150,7 +150,14 @@ export class OpsLoop {
       await this.#recoverCapture();
       return;
     }
-    if (d === 'play_now' || d === 'cycle_table') {
+    if (d === 'play_now') {
+      // "Play now" means start a round on the table that is open. Using the rotation for it changed
+      // the table instead, and an idle-looking host rotated every few minutes instead of holding the
+      // designed 10–60 min dwell (measured: a rotation 4.4 min after boot, caused by `do=play_now`).
+      if (typeof this.controller?.playNowTable === 'function') this.controller.playNowTable();
+      return;
+    }
+    if (d === 'cycle_table') {
       this.rotation?.playNow?.();
       return;
     }

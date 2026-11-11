@@ -28,7 +28,8 @@ Rules:
 - Demo stake stays 0 in code. Never wallet, deposit, Over, Under, or a table URL.
 - click must be a short play label from State.controls (Bet, GO, Hit, Stand, Higher, Lower, Random pick, Auto pick, Skip, Same, Cash out, Deal, Roll, Play, Start). If State.active is true, do not click — the controller owns hands.
 - State.black true -> rearm_capture.
-- No play click for a long time and not active -> play_now.
+- No play click for a long time and not active -> play_now (start a round on the table that is open).
+- cycle_table changes the table. Use it only when the owner asked for a different game; play_now and cycle_table are not the same thing.
 - Unanswered Kick chat -> speak one short English line using their name. Max 12 words. No deposits, no real money.
 - A screenshot if present is eyes only. Never pick a click from pixels. Hands use State.controls.
 - Prefer noop when already playing.

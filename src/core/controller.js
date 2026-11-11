@@ -131,6 +131,13 @@ export class Controller {
   pause() { this._paused = true; this._active = false; }
   resume() { this._paused = false; }
 
+  // The ops loop asking for play: get a round going on the table that is open, without touching the
+  // rotation. The next tick re-plans the current table with one round.
+  playNowTable() {
+    if (this._paused) this._paused = false;
+    this._nextRoundAt = 0;
+  }
+
   status() {
     const p = this.planner.status();
     return {
