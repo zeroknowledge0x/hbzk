@@ -42,7 +42,22 @@ export class Controller {
     // Breathing room between rounds. Without it a table whose "round" is one click (Hilo
     // skip, Dice bet) replans the instant it finishes and looks like a click bot.
     this._nextRoundAt = 0;
+    // A bet that is on the table is not over until a result is read back. The page phase can
+    // read idle for a beat while a board settles, and that gap is how the host used to walk
+    // off mid-round. The cap keeps a lost result from wedging the rotation forever.
+    this._betAt = 0;
+    this._betCapMs = Number(process.env.HUBIE_BET_CAP_MS) > 0 ? Number(process.env.HUBIE_BET_CAP_MS) : 45000;
+    this._deferredGame = null;
   }
+
+  _roundLive(now = this.now()) {
+    if ((this.world?.get?.()?.phase || '') === 'playing') return true;
+    return !!this._betAt && now - this._betAt < this._betCapMs;
+  }
+
+  _noteBet() { this._betAt = this.now(); }
+
+  _noteSettled() { this._betAt = 0; }
 
   // 6-15 s, the same band the quiet-talk timer uses for a human beat.
   _dwell() { return 6000 + Math.floor(this.random() * 9000); }
@@ -130,6 +145,16 @@ export class Controller {
     // Check playable whitelist
     if (this.playable.size > 0 && !this.playable.has(gameName.toLowerCase())) {
       this.speak(`cannot run zero-stake on ${gameName}`, msg);
+      return;
+    }
+
+    // A round with a bet on it finishes first. Walking off mid-round is what made the host look
+    // like it abandoned the table; the switch is deferred, not dropped.
+    if (this._roundLive()) {
+      const actual = this.world?.get?.()?.game || '';
+      this._deferredGame = gameName;
+      this.speak(`finishing ${actual || 'this one'} first, then ${gameName}`, msg);
+      this.log(`controller: switch to ${gameName} deferred (round in progress)`);
       return;
     }
 
@@ -275,6 +300,19 @@ export class Controller {
   async _tick() {
     if (this._paused || this._recovering()) return;
     if (!this._active) {
+      // A switch that was asked for during a round runs the moment that round is over.
+      if (this._deferredGame && !this._roundLive()) {
+        const name = this._deferredGame;
+        this._deferredGame = null;
+        if (this.playable.has(String(name).toLowerCase())) {
+          this._nextRoundAt = 0;
+          this.planner.setGoal({ kind: 'play', game: name, rounds: 1 });
+          this.scratch = openTask(this.scratch, `play ${name}`);
+          this._active = true;
+          this.log(`controller: deferred switch -> ${name}`);
+          return;
+        }
+      }
       const asked = this.playQueue?.peek?.();
       if (asked && this.playable.has(String(asked.game).toLowerCase())) {
         const now = Date.now();
@@ -311,6 +349,9 @@ export class Controller {
       const st = this.planner.status();
       if (st.failed) {
         this._active = false;
+        // The plan gave up on this table, so the bet on it is abandoned on purpose. Holding the
+        // switch any longer would just keep the host parked on a table it cannot finish.
+        this._noteSettled();
         this._nextRoundAt = this.now() + this._dwell();
         this.log(`controller: plan failed (${st.error})`);
         // Reflexion: keep one verbal lesson, and after a few tries ask for a different table
@@ -381,8 +422,7 @@ export class Controller {
     if (this._recovering()) return { ok: false, deferred: true, error: 'Capture recovery in progress' };
     switch (step.kind) {
       case 'enter_game': {
-        const phase = this.world?.get?.()?.phase;
-        if (phase === 'playing') {
+        if (this._roundLive()) {
           const actual = this.world?.get?.()?.game;
           if (byName(actual)?.name !== byName(step.args?.game)?.name) {
             await this._playTable({ ...step, game: actual });
@@ -390,7 +430,9 @@ export class Controller {
           }
           return { ok: true, skipped: true, reason: 'in-round' };
         }
-        return this.tools.run('change_game', step.args);
+        const switched = await this.tools.run('change_game', step.args);
+        if (switched?.ok) this._noteSettled();
+        return switched;
       }
 
       case 'configure': {
@@ -414,8 +456,14 @@ export class Controller {
         const adapter = byName(this.planner.status().goal?.game);
         const timeout = adapter?.resolvesAtZero ? (step.timeout || 8000) : 1200;
         const verified = await this.verifier.waitFor('round_result', { before: this._snapshot, timeout });
-        if (verified?.ok) return verified;
-        if (!adapter?.resolvesAtZero) return { ok: true, skipped: true, reason: 'demo-click' };
+        if (verified?.ok) {
+          this._noteSettled();
+          return verified;
+        }
+        if (!adapter?.resolvesAtZero) {
+          this._noteSettled();
+          return { ok: true, skipped: true, reason: 'demo-click' };
+        }
         return verified;
       }
 
@@ -436,15 +484,20 @@ export class Controller {
         return r;
       }
       // The field is not in the DOM yet on a table that just opened. Wait, but not forever:
-      // a hung read used to freeze the click loop with no log at all.
+      // a hung read used to freeze the click loop with no log at all. A table that already
+      // burned the long wait gets the short one, so the same dead end is not paid twice.
       if (r?.pending || (r && r.ok !== true && /no stake control|not ready|timed out/i.test(String(r.error || '')))) {
         const now = this.now();
+        const game = String(this.world?.get?.()?.game || '');
+        const absent = this._stakeFieldAbsent || (this._stakeFieldAbsent = new Set());
+        const limit = absent.has(game) ? 1500 : 12000;
         if (!this._stakeWaitSince) this._stakeWaitSince = now;
-        if (now - this._stakeWaitSince < 12000) {
+        if (now - this._stakeWaitSince < limit) {
           this.log(`controller: stake not ready (${r.error}), waiting`);
           return { ok: false, deferred: true, error: r.error };
         }
         this._stakeWaitSince = 0;
+        absent.add(game);
         // Empty and locked is not a number. A non-zero lock still fails above. Don't kill the round.
         this.log('controller: stake field stayed empty, continuing without a write');
         return { ok: false, skipped: true, error: r.error || 'stake field never appeared' };
@@ -591,10 +644,15 @@ export class Controller {
         this.speak(lesson ? `${cashoutLine(gameName, { progress })} ${lesson}.` : cashoutLine(gameName, { progress }), {});
       }
       this.notifyAction?.(String(label));
+      // Taking a bet off the table is the one click that ends a round instead of starting one.
+      if (!/^cash out/i.test(String(label))) this._noteBet();
       return { ok: true, detail: raw };
     }
     const raw = await this.tools.run('click', { label });
-    if (raw?.ok) await this._snapPlay(raw.text || label);
+    if (raw?.ok) {
+      await this._snapPlay(raw.text || label);
+      if (!/^cash out/i.test(String(label))) this._noteBet();
+    }
     return raw;
   }
 

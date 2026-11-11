@@ -49,6 +49,7 @@ export function cfg() {
     llmUrl: process.env.LLM_BASE_URL || 'https://api.commandcode.ai/provider/v1/chat/completions',
     llmKey: process.env.LLM_API_KEY || '',
     llmModel: process.env.LLM_MODEL || 'deepseek/deepseek-v4.1-flash',
+    llmDecisionModel: process.env.LLM_DECISION_MODEL || process.env.LLM_MODEL || 'deepseek/deepseek-v4.1-flash',
     // Optional second provider, tried when the first is out of quota or unreachable.
     llmFallbackUrl: process.env.LLM_FALLBACK_URL || '',
     llmFallbackModel: process.env.LLM_FALLBACK_MODEL || '',

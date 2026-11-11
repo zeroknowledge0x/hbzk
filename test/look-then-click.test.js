@@ -154,3 +154,104 @@ test('chooseClick sends the control list to deepseek 4.1 flash and returns the n
   assert.match(sent.messages[1].content, /Medium/);
   assert.match(sent.messages[0].content, /no script/i);
 });
+
+test('the decision runs on its own model when one is configured', async () => {
+  const { Brain } = await import('../src/brain.js');
+  let sent = null;
+  const brain = new Brain(
+    {
+      llmUrl: 'https://llm.test/v1',
+      llmModel: 'deepseek/deepseek-v4.1-flash',
+      llmDecisionModel: 'claude-sonnet-5-5',
+      llmKey: 'k',
+    },
+    {
+      fetchImpl: async (_url, init) => {
+        sent = JSON.parse(init.body);
+        return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: 'Bet' } }] }) };
+      },
+    },
+  );
+  const label = await brain.chooseClick({ game: 'Wheel', phase: 'idle', controls: ['Bet'], progress: 0 });
+  assert.equal(label, 'Bet');
+  assert.equal(sent.model, 'claude-sonnet-5-5');
+});
+
+test('a table switch waits for the round that is already on the table', async () => {
+  const calls = [];
+  const changed = [];
+  let clock = 1000000;
+  const world = new World({ game: 'Mines', phase: 'idle', controls: ['Random tile', 'Cash out 2.40x', 'Bet'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Mines', rounds: 1 });
+  const c = new Controller({
+    world,
+    planner,
+    game: {
+      setStake: async () => ({ ok: true, verified: true, observed: 0 }),
+      clickText: async (label) => { calls.push(label); return { ok: true, text: label }; },
+      getReport: () => ({ url: '' }),
+    },
+    tools: { run: async (name, args) => { if (name === 'change_game') changed.push(args?.game); return { ok: true }; } },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    random: () => 0,
+    now: () => clock,
+    log: () => {},
+    look: async () => 'Random tile',
+  });
+  const bet = await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
+  assert.equal(bet.ok, true);
+
+  // A planner step aimed at another table must not walk off mid-round.
+  const step = await c._executeStep({ kind: 'enter_game', args: { game: 'Dice' } });
+  assert.equal(changed.includes('Dice'), false, 'no switch while the bet is live');
+  assert.equal(step.deferred, true);
+
+  const said = [];
+  c.speak = (line) => said.push(line);
+  await c.handle({ kind: 'change_game', args: { game: 'Dice' } }, {});
+  assert.equal(changed.includes('Dice'), false);
+  assert.equal(c._deferredGame, 'Dice', 'the switch is kept, not dropped');
+  assert.ok(said.some((l) => /finishing/i.test(l)), said.join(' | '));
+
+  // Once the round settles the deferred switch runs by itself.
+  clock += 5000;
+  c._noteSettled();
+  await c.tick();
+  assert.equal(c._deferredGame, null);
+  assert.equal(planner.status().goal.game, 'Dice');
+});
+
+test('a second wait on the same table is short', async () => {
+  let clock = 0;
+  const world = new World({ game: 'Dragon Tower', phase: 'idle', controls: ['Bet'], stake: 0 });
+  const planner = new Planner({ world });
+  const c = new Controller({
+    world,
+    planner,
+    game: {
+      setStake: async () => ({ ok: false, error: 'stake control is not ready' }),
+      clickText: async () => ({ ok: false }),
+      getReport: () => ({}),
+    },
+    tools: { run: async () => ({ ok: false }) },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    now: () => clock,
+    log: () => {},
+  });
+  clock = 13000;
+  const firstPass = await c._verifyZeroStake();
+  assert.equal(firstPass.deferred, true, 'the long wait starts as a wait');
+  clock = 26000;
+  const first = await c._verifyZeroStake();
+  assert.equal(first.skipped, true, 'the long wait ends in a skipped write, not a failed round');
+
+  clock = 27500;
+  const waiting = await c._verifyZeroStake();
+  assert.equal(waiting.deferred, true, 'a short wait is still a wait');
+
+  clock = 29100;
+  const second = await c._verifyZeroStake();
+  assert.equal(second.skipped, true, '1.5s is enough the second time, not another 12s');
+});
+

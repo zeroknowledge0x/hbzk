@@ -160,7 +160,7 @@ export class Brain {
           role: 'user',
           content: `TABLE ${game || 'unknown'} phase=${phase || 'unknown'} progress=${Number(progress) || 0}${note ? `\nON SCREEN: ${note}` : ''}\nCONTROLS:\n${offered.map((label, i) => `${i + 1}. ${label}`).join('\n')}\nLast line only: one label copied from the list, or none.`,
         },
-      ], { maxTokens: 300, temperature: 0.2, timeoutMs: 15000, joinReasoning: true });
+      ], { maxTokens: 120, temperature: 0, timeoutMs: 15000, joinReasoning: true, model: this.cfg.llmDecisionModel || this.cfg.llmModel });
     } catch (err) {
       log(`brain: look skipped (${err?.message || err})`);
       return null;
@@ -168,7 +168,7 @@ export class Brain {
     return String(text || '').trim() || null;
   }
 
-  async #chat(messages, { maxTokens = 220, temperature = 0.9, timeoutMs = 20000, joinReasoning = false } = {}) {
+  async #chat(messages, { maxTokens = 220, temperature = 0.9, timeoutMs = 20000, joinReasoning = false, model = null } = {}) {
     const ms = Number(timeoutMs) > 0 ? Number(timeoutMs) : 20000;
     // Try the configured provider, then any provider the chain says is not in cooldown. A
     // spent quota on one plan must not mute the host when a second key is configured.
@@ -183,7 +183,7 @@ export class Brain {
     for (const p of list) {
       if (!p?.url || tried.includes(p.url)) continue;
       tried.push(p.url);
-      const body = { model: p.model || this.cfg.llmModel, messages, max_tokens: maxTokens, temperature };
+      const body = { model: model || p.model || this.cfg.llmModel, messages, max_tokens: maxTokens, temperature };
       let res = null;
       try {
         res = await this.fetchImpl(p.url, {

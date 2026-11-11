@@ -65,7 +65,7 @@ test('unverified demo attempts never increment completed rounds', async () => {
   assert.equal(f.planner.status().failed, false);
 });
 
-test('midround requested switch drains actual adapter and defers navigation until idle', async () => {
+test('midround requested switch drains actual adapter and defers navigation until the round is settled', async () => {
   const f = fixture('Keno', ['Higher / same', 'Lower / same', 'Cash out $ 0.00'], 'playing');
   f.world.set('game', 'Hilo');
   await f.c.tick();
@@ -74,6 +74,10 @@ test('midround requested switch drains actual adapter and defers navigation unti
   assert.ok(f.calls.some(x => x[0] === 'click' && /^(Higher|Lower|Cash out)$/.test(x[1])));
   assert.equal(f.planner.status().step, 0);
   f.world.set('phase', 'idle'); f.world.set('controls', ['Bet']);
+  await f.c.tick();
+  // Idle on the page is not enough: the bet is still live, so the switch waits for a result.
+  assert.equal(f.calls.some(x => x[0] === 'change_game' && x[1].game === 'Keno'), false);
+  f.c._noteSettled();
   await f.c.tick();
   assert.ok(f.calls.some(x => x[0] === 'change_game' && x[1].game === 'Keno'));
 });

@@ -546,7 +546,7 @@ const rotation = new Rotation({file:path.join(process.cwd(),'data','rotation.jso
 rotation.playNow();
 const controller = new Controller({world,tools:coreTools,planner,verifier,game,rotation,playable:allowed,log,playQueue,
   // The model looks at the compressed control list and names the click. No policy fallback.
-  look: (view) => brain.chooseClick(view),
+  look: (view) => jevClick(view),
   // Only verified rounds reach the playbook; the controller only reads its advice.
   advise: (table, info) => advise(playbook, table, info),
   notifyAction: (label) => { driftWatch = noteAction(driftWatch, { action: label }); },
@@ -894,6 +894,20 @@ async function jevReply(m) {
   }
   log(`chat: jev kb=${entry.id} conf=${hit.conf.toFixed(2)} name=${m.name}`);
   return entry;
+}
+
+// The click decision, cheapest first: Jev classifies one label out of those on screen in a single
+// short call, and the LLM only runs when Jev is off, unsure, or fails. Either way the answer is a
+// label the controller still resolves against the live board, so a wrong name is still a no-click.
+async function jevClick(view) {
+  if (jev.enabled) {
+    const hit = await jev.chooseClick(view).catch((err) => {
+      log(`jev: click request failed: ${err?.message || err}`);
+      return null;
+    });
+    if (hit) return hit.label;
+  }
+  return brain.chooseClick(view);
 }
 
 // Brain first, with a short budget. A hung call used to block the whole FIFO for 20s

@@ -111,6 +111,8 @@ chat jumps the queue.
 | `src/core/drift.js` | Drift watch: stuck click loops, encoder frame-time drift and capture stalls become an alert the next tick reacts to |
 | `scripts/logic-audit.mjs` | Sweeps all eleven tables × phases × control shapes (1,320 policy cases + 69 controller steps) and fails on a dead end, an off-table label, a mid-round setting write or a click without a verified zero stake |
 | `src/core/look-then-click.js` | The click, on every table, is the label the model names after it sees the controls. A long board is compressed. A silent or illegal answer is a no-click — the measured policy is not a fallback |
+| Jev first, LLM second | The click is classified by `typesafe/jev` (~0.4-1.3 s) when it clearly beats waiting, and the LLM decides the rest. Either way the label must still be on the table |
+| A round is not left mid-way | A bet on the table is tracked until a result is read back; a requested table change is spoken, deferred, and run the moment the round settles. A plan that fails releases it, so a dead table cannot park the host |
 | `clickText` actionability | A click fails loudly when the target is covered, off-screen or moving, and scrolls a below-the-fold target into view first |
 
 ## Layout

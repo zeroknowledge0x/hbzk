@@ -11,6 +11,9 @@ export const DEFAULT_MODEL = 'typesafe/jev';
 const ACTION_CONF = { wait: 0.65, silence: 0.65, speak: 0.72, reload: 0.85 };
 export const AUTO_ACTIONS = new Set(Object.keys(ACTION_CONF));
 export const REPLY_CONF = 0.7;
+// The click is a classification: pick one label that is already on the table, or none. A cheap
+// classifier answers that in one short call, where a reasoning model spends seconds thinking.
+export const CLICK_CONF = 0.7;
 
 export const ACTIONS = ['wait', 'reload', 'speak', 'silence', 'click', 'navigate'];
 
@@ -51,6 +54,51 @@ export class Jev {
   acceptsReply(choice, confidence) {
     if (!choice || choice === 'none') return false;
     return Number(confidence) >= Math.max(REPLY_CONF, this.minConfidence);
+  }
+
+  acceptsClick(label, confidence, probabilities = {}) {
+    if (!label || label === 'none') return false;
+    const mine = Number(probabilities?.[label]);
+    const none = Number(probabilities?.none);
+    // Jev's click confidences sit around 0.4-0.6 (measured: Bet 0.51, Random tile 0.84, and often
+    // "none" on a hand it cannot read), so an absolute floor is the wrong test. What matters is
+    // whether this label beats waiting; when it does not, the caller falls through to the LLM.
+    if (Number.isFinite(mine) && Number.isFinite(none)) return mine > none;
+    return Number(confidence) >= Math.max(CLICK_CONF, this.minConfidence);
+  }
+
+  // The click decision: one label out of the ones that are on the table right now.
+  // Null on any failure or an unsure answer, so the caller can fall through to the LLM.
+  async chooseClick({ game, phase, controls, progress, seen } = {}) {
+    const offered = (Array.isArray(controls) ? controls : [])
+      .map((label) => String(label || '').replace(/\s+/g, ' ').trim())
+      .filter((label) => label && !label.startsWith('…'));
+    if (!offered.length) return null;
+    const criteria = { none: 'No visible control is the right next click; wait instead of guessing.' };
+    for (const label of offered) criteria[label] = `Click "${label}" on the table.`;
+    const state = [
+      `Table ${game || 'unknown'} phase=${phase || 'unknown'} progress=${Number(progress) || 0}`,
+      seen ? `On screen: ${clip(seen, 200)}` : '',
+      'Controls on the table right now:',
+      ...offered.map((label) => `- ${clip(label, 60)}`),
+    ].filter(Boolean).join('\n');
+    const answer = await this.#ask('click', {
+      state,
+      instructions: 'Pick the ONE next click on this demo-casino table, copied exactly from the control list, or "none" when no control should be clicked yet. Never invent a label, and never pick a wallet, stake, amount or mode control.',
+      criteria,
+    });
+    if (!answer) return null;
+    const label = offered.find((c) => c.toLowerCase() === String(answer.choice).toLowerCase());
+    if (!label) {
+      log(`jev: click abstain choice=${clip(String(answer.choice), 40)}`);
+      return null;
+    }
+    if (!this.acceptsClick(label, answer.confidence, answer.probabilities)) {
+      log(`jev: click defer label=${label} conf=${answer.confidence.toFixed(2)}`);
+      return null;
+    }
+    log(`jev: click ${clip(label, 40)} conf=${answer.confidence.toFixed(2)}`);
+    return { label, conf: answer.confidence };
   }
 
   // One tick -> one action choice. Returns null on any failure so the loop can defer.
