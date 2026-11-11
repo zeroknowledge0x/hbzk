@@ -522,6 +522,40 @@ test('a label the filter removed cannot be reached by naming it', async () => {
   assert.equal(first.ok, false, 'the pick is refused, not clicked');
 });
 
+test('a mid-round refusal does not spend the switch budget', async () => {
+  const changed = [];
+  const logs = [];
+  let clock = 1000;
+  const world = new World({ game: 'Dragon Tower', phase: 'playing', controls: ['Bet', 'Random pick', 'Pick floor 1, tile 1'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Blackjack', rounds: 3 });
+  const c = new Controller({
+    world,
+    planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (l) => ({ ok: true, text: l }), getReport: () => ({}) },
+    tools: {
+      run: async (name, args) => {
+        if (name !== 'change_game') return { ok: true };
+        changed.push(args.game);
+        // The first three are refused while the tools layer still sees a live round.
+        return changed.length <= 3 ? { ok: false, error: 'cannot change game mid-round' } : { ok: true };
+      },
+    },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    now: () => clock,
+    log: (l) => logs.push(String(l)),
+    look: async () => 'Random pick',
+  });
+  c._active = true;
+  for (let i = 0; i < 6; i++) {
+    c._noteBet('Bet'); // keep the round live so every attempt goes through the switch guard
+    clock += 11000;
+    await c._executeStep({ kind: 'enter_game', args: { game: 'Blackjack' } });
+  }
+  assert.equal(changed.length, 6, 'refusals did not count as tries');
+  assert.equal(logs.some((l) => /will not come up/.test(l)), false, 'the table is not declared dead');
+});
+
 test('a second wait on the same table is short', async () => {
   let clock = 0;
   const world = new World({ game: 'Dragon Tower', phase: 'idle', controls: ['Bet'], stake: 0 });

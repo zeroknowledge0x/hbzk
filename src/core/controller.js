@@ -681,7 +681,16 @@ export class Controller {
         this.log(`controller: board is ${onScreen}, not ${planned} — switching the table first`);
         this._noteSettled();
         const r = await this.tools.run('change_game', { game: planned });
-        return r?.ok ? { ok: true, detail: r } : { ok: false, deferred: true, error: 'table switch failed' };
+        if (r?.ok) return { ok: true, detail: r };
+        // The tools layer refuses a switch while it still sees a live round. That refusal costs
+        // nothing and is not a failed attempt: give the round a beat instead of burning the budget
+        // (measured: three 0 ms refusals, then the switch that navigated took 3.7 s).
+        if (/mid-round|in-round/i.test(String(r?.error || ''))) {
+          entry.tries = Math.max(0, entry.tries - 1);
+          this._boardSwitches.set(key, entry);
+          return { ok: false, deferred: true, error: `${planned} waits for the round to end` };
+        }
+        return { ok: false, deferred: true, error: 'table switch failed' };
       }
       this._boardSwitches?.clear();
       if (this._blockedGame !== gameName) {
