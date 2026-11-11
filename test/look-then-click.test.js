@@ -339,6 +339,29 @@ test('a board showing another table is switched, never clicked', async () => {
   assert.deepEqual(changed, ['Dice'], 'the tile board is not clicked, Dice is opened instead');
 });
 
+test('a plan for another table is not clicked, and a table that will not load is dropped', async () => {
+  const changed = [];
+  const goals = [];
+  const world = new World({ game: 'Hilo', phase: 'idle', controls: ['Bet', 'Higher / same', 'Skip card'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Keno', rounds: 3 });
+  const realSetGoal = planner.setGoal.bind(planner);
+  planner.setGoal = (g) => { goals.push(g); return realSetGoal(g); };
+  const c = new Controller({
+    world,
+    planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (l) => ({ ok: true, text: l }), getReport: () => ({}) },
+    tools: { run: async (name, args) => { if (name === 'change_game') changed.push(args.game); return { ok: true }; } },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    now: () => 1000,
+    log: () => {},
+    look: async () => 'Skip card',
+  });
+  for (let i = 0; i < 4; i++) await c._executeStep({ kind: 'start_round', args: { label: 'Bet' } });
+  assert.deepEqual(changed, ['Keno', 'Keno', 'Keno'], 'three tries to bring Keno up, never a Hilo card click');
+  assert.equal(goals.at(-1).game, 'Hilo', 'a table that will not come up is dropped for the open one');
+});
+
 test('a second wait on the same table is short', async () => {
   let clock = 0;
   const world = new World({ game: 'Dragon Tower', phase: 'idle', controls: ['Bet'], stake: 0 });

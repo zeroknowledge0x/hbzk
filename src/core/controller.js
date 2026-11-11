@@ -576,15 +576,30 @@ export class Controller {
         if (fresh.length) live = fresh;
         seen = String(snap?.dialogText || '').slice(0, 240);
       }
-      // Never click a board that belongs to another table: the page URL can say Dice while the
-      // screen still shows the previous table, and those coordinates are not the plan's table.
+      // Never click a board that belongs to another table. The plan's table is the authority here:
+      // a start_round step carries no game of its own, and the world's name comes from the page
+      // URL, which can lag the board (the host then clicked Hilo's cards under a Keno goal).
+      const planned = String(this.planner?.status?.()?.goal?.game || gameName || '').trim();
       const onScreen = boardTable(live);
-      if (onScreen && gameName && byName(onScreen)?.name !== byName(gameName)?.name) {
-        this.log(`controller: board is ${onScreen}, not ${gameName} — switching the table first`);
+      if (onScreen && planned && byName(onScreen)?.name !== byName(planned)?.name) {
+        const key = `${onScreen}->${planned}`;
+        this._boardSwitches = this._boardSwitches || new Map();
+        const tries = (this._boardSwitches.get(key) || 0) + 1;
+        this._boardSwitches.set(key, tries);
+        if (tries > 3) {
+          // The planned table will not come up. Playing the one that is actually open beats
+          // standing still on the stream.
+          this.log(`controller: ${planned} will not come up after ${tries} tries — playing ${onScreen} instead`);
+          this._noteSettled();
+          this.planner?.setGoal?.({ kind: 'play', game: onScreen, rounds: 1 });
+          return { ok: false, deferred: true, error: 'planned table would not come up' };
+        }
+        this.log(`controller: board is ${onScreen}, not ${planned} — switching the table first`);
         this._noteSettled();
-        const r = await this.tools.run('change_game', { game: gameName });
+        const r = await this.tools.run('change_game', { game: planned });
         return r?.ok ? { ok: true, detail: r } : { ok: false, deferred: true, error: 'table switch failed' };
       }
+      this._boardSwitches?.clear();
       if (this._blockedGame !== gameName) {
         this._blockedGame = gameName;
         this._blocked = new Set();
