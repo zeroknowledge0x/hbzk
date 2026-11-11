@@ -440,6 +440,33 @@ test('a table whose result cannot be read comes off the rotation after three tri
   assert.ok(logs.some((l) => /Dice failed 3 result reads in a row/.test(l)), logs.join(' | '));
 });
 
+test('a step that clicks without ever settling is bounded and named', async () => {
+  const logs = [];
+  const clicks = [];
+  let clock = 1000;
+  // The URL says Hubie's Road while the board is Dragon Tower's — the state that made the in-round
+  // enter_game play the table and defer again, forever (measured 61 clicks, zero planner lines).
+  const world = new World({ game: "Hubie's Road", phase: 'playing', controls: ['Bet', 'Random pick', 'Pick floor 1, tile 1', 'Cash out 1.90x'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Dragon Tower', rounds: 1 });
+  const c = new Controller({
+    world,
+    planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (l) => { clicks.push(l); return { ok: true, text: l }; }, getReport: () => ({}) },
+    tools: { run: async () => ({ ok: true }) },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    now: () => clock,
+    log: (l) => logs.push(String(l)),
+    look: async () => 'Random pick',
+  });
+  c._active = true;
+  c._noteBet('Bet'); // a live bet holds the switch, so the step is retried every tick
+  for (let i = 0; i < 12; i++) { clock += 1500; await c.tick(); }
+  // Nine clicks for the held enter_game, then the plan moves on and takes its next step.
+  assert.ok(clicks.length <= 10, `clicks bounded, got ${clicks.length}`);
+  assert.ok(logs.some((l) => /enter_game clicked 9 times without settling/.test(l)), logs.join(' | '));
+});
+
 test('a second wait on the same table is short', async () => {
   let clock = 0;
   const world = new World({ game: 'Dragon Tower', phase: 'idle', controls: ['Bet'], stake: 0 });

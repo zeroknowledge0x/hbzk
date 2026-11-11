@@ -65,6 +65,8 @@ export class Controller {
     // The idle dial the model keeps turning, and how many times in a row.
     this._chipLabel = null;
     this._chipCount = 0;
+    // Clicks spent on the current step without it ever settling.
+    this._stepClicks = 0;
   }
 
   _roundLive(now = this.now()) {
@@ -426,10 +428,25 @@ export class Controller {
 
     // Settle the planner with the result (await tool only once per tick)
     if (result?.deferred) {
+      // A step that keeps clicking without ever settling is a click bot: the in-round enter_game
+      // held a live bet, played the table, and deferred again — forever (measured 61 clicks with
+      // zero planner lines). Bound it, name it, and let the plan move on.
+      if (result.clicked) {
+        this._stepClicks = (this._stepClicks || 0) + 1;
+        if (this._stepClicks > 8) {
+          this.log(`controller: ${step.kind} clicked ${this._stepClicks} times without settling — moving on`);
+          this._stepClicks = 0;
+          this._deferredStep = null;
+          this._noteSettled();
+          this.planner.settle({ ok: true, skipped: true, reason: 'click-budget' });
+          return;
+        }
+      }
       // Keep this exact step pending without spending retry/fallback budget.
       this._deferredStep = step;
       return;
     }
+    this._stepClicks = 0;
     this._deferredStep = null;
     this.planner.settle(result);
 
@@ -505,8 +522,14 @@ export class Controller {
                 return away;
               }
             }
-            await this._playTable({ ...step, game: actual });
-            return { ok: false, deferred: true, reason: 'in-round', error: 'Waiting for current table before switch' };
+            const played = await this._playTable({ ...step, game: actual });
+            return {
+              ok: false,
+              deferred: true,
+              reason: 'in-round',
+              error: 'Waiting for current table before switch',
+              clicked: !!played?.detail,
+            };
           }
           return { ok: true, skipped: true, reason: 'in-round' };
         }
