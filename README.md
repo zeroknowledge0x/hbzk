@@ -6,7 +6,7 @@ voice. After navigation, the controller waits briefly for a recognizable table
 before attempting a play click; an unresolved identity enters planner recovery.
 For Dice, choosing a direction is a preset, not a completed demo round; the model
 must select a start control to advance. Website navigation such as New Releases
-is excluded from the controls offered for gameplay.
+and Housebets Exclusives is excluded from the controls offered for gameplay.
 
 Contest: https://www.housebets.com/contests/hubie-streamer
 

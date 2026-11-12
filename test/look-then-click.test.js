@@ -76,6 +76,13 @@ test('chrome and stake traps are not offered to the model', () => {
   assert.deepEqual(legalControls(['Cash out 0 1.00x', 'Cash out IDR 0', 'Cash out 2.40x', 'Higher']), ['Cash out 2.40x', 'Higher']);
 });
 
+test('Housebets Exclusives navigation is excluded from offered and resolved controls', () => {
+  for (const label of ['Housebets Exclusives', 'Housebets Exclusives Housebets Exclusives', 'Housebets Exclusives 42']) {
+    assert.deepEqual(legalControls(['Bet', label]), ['Bet']);
+    assert.equal(pickFromReply(label, ['Bet', label]), null);
+  }
+});
+
 test('new releases navigation labels cannot be offered or selected', () => {
   for (const nav of ['New Releases', 'New Releases New Releases', 'New Releases 42']) {
     assert.deepEqual(legalControls(['Bet', nav]), ['Bet']);
