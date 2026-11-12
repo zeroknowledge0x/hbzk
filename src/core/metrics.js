@@ -76,5 +76,7 @@ export function metricsLine(m, now = Date.now()) {
     ? `${Math.round(s.replyRate * 100)}%`
     : (s.split ? 'counters split' : '—');
   const lat = s.latencyMs === null ? '—' : `${(s.latencyMs / 1000).toFixed(1)}s`;
-  return `CHAT ${s.messages} in · ${s.replies} answered (${rate}) · ${lat} · ${s.unanswered} missed`;
+  // "answered" claimed more than the counter can prove: it counts spoken reply lines, which
+  // include greetings and owner lines with no inbound message behind them. Say `spoke`.
+  return `CHAT ${s.messages} in · ${s.replies} spoke (${rate}) · ${lat} · ${s.unanswered} missed`;
 }

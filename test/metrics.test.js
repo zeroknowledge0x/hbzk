@@ -48,7 +48,7 @@ test('the overlay line carries rate and latency', () => {
   m = noteMessage(m, { text: 'hi', at: T });
   m = noteReply(m, T + 1000);
   const line = metricsLine(m, T + 2000);
-  assert.match(line, /CHAT 1 in · 1 answered \(100%\)/);
+  assert.match(line, /CHAT 1 in · 1 spoke \(100%\)/);
   assert.match(line, /1\.0s/);
 });
 
@@ -59,5 +59,5 @@ test('a reply with no message behind it does not print a rate above 100%', () =>
   const s = snapshot(m, T);
   assert.equal(s.split, true);
   assert.equal(s.replyRate, null);
-  assert.match(metricsLine(m, T), /CHAT 1 in · 4 answered \(counters split\)/);
+  assert.match(metricsLine(m, T), /CHAT 1 in · 4 spoke \(counters split\)/);
 });
