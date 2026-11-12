@@ -416,7 +416,7 @@ test('a switch in flight is not re-fired on the next tick', async () => {
   assert.deepEqual(changed, ['Keno', 'Keno'], 'a real retry only after the grace window');
 });
 
-test('an idle chip clicked twice stops being offered, Bet does not', async () => {
+test('a chip the model turned does not replace the Bet', async () => {
   const views = [];
   let clock = 1000;
   const world = new World({ game: 'Wheel', phase: 'idle', controls: ['Bet', 'Low', 'Medium', 'High'], stake: 0 });
@@ -436,7 +436,9 @@ test('an idle chip clicked twice stops being offered, Bet does not', async () =>
   const last = views.at(-1);
   assert.equal(last.controls.some((l) => /^medium$/i.test(l)), false, 'the dial the model kept turning is dropped');
   assert.ok(last.controls.some((l) => /^bet$/i.test(l)), 'the way to actually play is still there');
-  assert.ok(last.controls.some((l) => /high/i.test(l)), 'the other chips are untouched');
+  // One chip sets the dial for the round; a second chip is the host turning dials instead of
+  // playing. A different chip is the same dial (Outside/Inside alternated 24 times on Dice).
+  assert.equal(last.controls.some((l) => /^high$/i.test(l)), false, 'the other chips are dials too');
 });
 
 test('a table whose result cannot be read comes off the rotation after three tries', async () => {
@@ -718,6 +720,42 @@ test('a live bet never expires into a completed hand', () => {
   assert.equal(c._roundLive(), true, 'a timeout is not proof of settlement');
   c._noteSettled();
   assert.equal(c._roundLive(), false);
+});
+
+test('a Dice preset that keeps changing does not replace the Bet', async () => {
+  const world = new World({ game: 'Dice', phase: 'idle', controls: ['Outside', 'Inside', 'Bet'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Dice', rounds: 1 });
+  const clicked = []; const offers = [];
+  const picks = ['Outside', 'Inside', 'Bet'];
+  const c = new Controller({ world, planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (l) => { clicked.push(l); return { ok: true, text: l }; }, getReport: () => ({}) },
+    tools: { run: async () => ({ ok: true }) }, verifier: { waitFor: async () => ({ ok: false }) },
+    log: () => {}, look: async (view) => { offers.push([...view.controls]); return picks[offers.length - 1] || 'Bet'; } });
+  for (let i = 0; i < 3; i++) await c._executeStep({ kind: 'start_round', args: {} });
+  // Measured 2026-11-12 09:00:51-09:02:24: the host alternated Outside/Inside for 24 clicks with
+  // zero rounds, because the guard only counted a chip clicked twice *in a row* and the alternation
+  // reset it on every switch. One dial turn per round, then play.
+  const afterFirst = offers[1] || [];
+  assert.equal(afterFirst.includes('Outside'), false, `still offering Outside: ${afterFirst.join('|')}`);
+  assert.equal(afterFirst.includes('Inside'), false, `still offering Inside: ${afterFirst.join('|')}`);
+  assert.ok(afterFirst.includes('Bet'), `Bet must stay available: ${afterFirst.join('|')}`);
+  assert.deepEqual(clicked.slice(0, 2), ['Outside', 'Bet'], `the round is started, not dialled: ${clicked.join(',')}`);
+});
+
+test('a Dice preset click is counted against the halt budget', async () => {
+  const world = new World({ game: 'Dice', phase: 'idle', controls: ['Outside', 'Bet'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Dice', rounds: 1 });
+  const c = new Controller({ world, planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (l) => ({ ok: true, text: l }), getReport: () => ({}) },
+    tools: { run: async () => ({ ok: true }) }, verifier: { waitFor: async () => ({ ok: false }) },
+    log: () => {}, look: async () => 'Outside' });
+  // The step stays deferred — a direction is not a round — but the click must not be invisible to
+  // the halt budget, which keys on `clicked`. This return used to omit it and was unbounded.
+  const r = await c._executeStep({ kind: 'start_round', args: {} });
+  assert.equal(r.deferred, true);
+  assert.equal(r.clicked, true);
 });
 
 test('a second wait on the same table is short', async () => {

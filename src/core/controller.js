@@ -72,6 +72,10 @@ export class Controller {
     // The idle dial the model keeps turning, and how many times in a row.
     this._chipLabel = null;
     this._chipCount = 0;
+    // Dial turns of any kind in the current round (the model alternating Outside/Inside is still
+    // turning one dial, and a per-label count resets on every switch: measured 24 preset clicks
+    // in 100 s with zero rounds on Dice, 2026-11-12 09:00:51-09:02:24).
+    this._chipsThisRound = 0;
     // Clicks spent on the current step without it ever settling.
     this._stepClicks = 0;
     // Tables declined earlier today, read back from disk so a restart does not re-offer them. The
@@ -95,7 +99,7 @@ export class Controller {
     this._betAt = this.now();
   }
 
-  _noteSettled() { this._betAt = 0; this._fallbackHolds = 0; this._repeatLabel = null; this._repeatCount = 0; this._chipLabel = null; this._chipCount = 0; }
+  _noteSettled() { this._betAt = 0; this._fallbackHolds = 0; this._repeatLabel = null; this._repeatCount = 0; this._chipLabel = null; this._chipCount = 0; this._chipsThisRound = 0; }
 
   // How long a table change is given to paint before the next try counts. Overridable so a test
   // does not have to wait.
@@ -111,11 +115,13 @@ export class Controller {
     else { this._repeatLabel = key; this._repeatCount = 1; }
     // Track the idle dials separately: a chip is allowed to vary the table, not to replace play.
     if (MODE_CHIP.test(key)) {
+      this._chipsThisRound = (this._chipsThisRound || 0) + 1;
       this._chipCount = (key === this._chipLabel) ? this._chipCount + 1 : 1;
       this._chipLabel = key;
     } else if (STARTS_ROUND.test(key)) {
       this._chipLabel = null;
       this._chipCount = 0;
+      this._chipsThisRound = 0;
     }
   }
 
@@ -750,11 +756,13 @@ export class Controller {
       if (this._repeatCount >= 10 && this._repeatLabel) {
         live = live.filter((label) => String(label).toLowerCase() !== this._repeatLabel);
       }
-      // A risk or mode chip sets a dial; it never starts a round. Two in a row while the table is
-      // idle is the model turning the same dial instead of playing (measured: Wheel's "Medium"
-      // clicked 12 times in 7 minutes), so the chip stops being offered and Bet stays.
-      if (this._chipCount >= 2 && this._chipLabel && worldState.phase !== 'playing') {
-        live = live.filter((label) => String(label).toLowerCase() !== this._chipLabel);
+      // A risk or mode chip sets a dial; it never starts a round. Once one chip has been turned in a
+      // round, the dial is set and every chip stops being offered so the model has to play (Bet and
+      // friends stay). Measured: Wheel's "Medium" clicked 12 times in 7 minutes, and on Dice the
+      // host alternated Outside/Inside for 24 clicks with zero rounds — a per-label count resets on
+      // every switch, so the guard has to count dial turns, not repeats of one label.
+      if (this._chipsThisRound >= 1 && worldState.phase !== 'playing') {
+        live = live.filter((label) => !MODE_CHIP.test(String(label).trim()));
       }
       // The board the model may pick from: filtered, but not compressed. Resolution happens against
       // this list, not the raw snapshot — a zero cash-out row, a wallet label or a chrome button is
@@ -873,7 +881,9 @@ export class Controller {
       this._noteBet(raw.text || label);
       this._noteRepeat(raw.text || label);
       if (byName(gameName)?.name === 'Dice' && /^(?:over|under|inside|outside)(?:\s|$)/i.test(String(label).trim())) {
-        return { ok: false, deferred: true, error: 'Dice direction selected; waiting for Bet' };
+        // Still a dial, not a started round — but it is a click the round spent, so hand it to the
+        // halt budget. Without `clicked` this path was the one unbounded click loop left.
+        return { ok: false, deferred: true, clicked: true, error: 'Dice direction selected; waiting for Bet' };
       }
       return { ok: true, detail: raw };
     }
