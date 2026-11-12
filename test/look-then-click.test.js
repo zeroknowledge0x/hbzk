@@ -76,6 +76,14 @@ test('chrome and stake traps are not offered to the model', () => {
   assert.deepEqual(legalControls(['Cash out 0 1.00x', 'Cash out IDR 0', 'Cash out 2.40x', 'Higher']), ['Cash out 2.40x', 'Higher']);
 });
 
+test('settled Keno result cells are not offered or selectable', () => {
+  const fresh = 'Number 17, unpicked';
+  const hit = 'Number 16, picked, drawn — a hit';
+  const miss = 'Number 2, picked, drawn — a miss';
+  assert.deepEqual(legalControls(['Bet', fresh, hit, miss]), ['Bet', fresh]);
+  assert.equal(pickFromReply(hit, ['Bet', fresh, hit, miss]), null);
+});
+
 test('Housebets Exclusives navigation is excluded from offered and resolved controls', () => {
   for (const label of ['Housebets Exclusives', 'Housebets Exclusives Housebets Exclusives', 'Housebets Exclusives 42']) {
     assert.deepEqual(legalControls(['Bet', label]), ['Bet']);

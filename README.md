@@ -7,6 +7,7 @@ before attempting a play click; an unresolved identity enters planner recovery.
 For Dice, choosing a direction is a preset, not a completed demo round; the model
 must select a start control to advance. Website navigation such as New Releases
 and Housebets Exclusives is excluded from the controls offered for gameplay.
+Keno result cells marked as drawn are excluded from new selections.
 
 Contest: https://www.housebets.com/contests/hubie-streamer
 

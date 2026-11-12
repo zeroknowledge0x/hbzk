@@ -12,6 +12,8 @@ const CHROME = /\b(account|search|weekly prize|favourites?|favorites?|recently p
 const MONEY = /^(idr|usd|eur|pol|bnb|usdt|usdc|sol|eth)\b/i;
 // Manual/Auto only switch the bet mode. Clicking them in a loop is not playing.
 const MODE = /^(manual|auto)$/i;
+// Result-bearing Keno cells are readouts from an already drawn board, not fresh picks.
+const SETTLED_NUMBER = /^number\s+\d+\b.*\b(?:drawn|a hit|a miss)\b/i;
 const DECISION = /cash out|random|hit anyway|cancel|don't ask|dont ask|no thanks|close|stand|higher|lower|\bskip\b|\bbet\b/i;
 // A cash-out row sitting at 0 or 1.00x does nothing. Clicking it in a loop is not a round.
 function zeroCashout(text) {
@@ -23,7 +25,7 @@ export function legalControls(controls = []) {
   const out = [];
   for (const raw of controls) {
     const text = String(raw || '').replace(/\s+/g, ' ').trim();
-    if (!text || NEVER.test(text) || CHROME.test(text) || MONEY.test(text) || MODE.test(text) || zeroCashout(text)) continue;
+    if (!text || NEVER.test(text) || CHROME.test(text) || MONEY.test(text) || MODE.test(text) || SETTLED_NUMBER.test(text) || zeroCashout(text)) continue;
     if (out.some((c) => c.toLowerCase() === text.toLowerCase())) continue;
     out.push(text);
   }

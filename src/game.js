@@ -205,7 +205,7 @@ export class GameFeed {
           if (text) { const w = text.split(' '); text = w.filter((x, k) => k === 0 || x.toLowerCase() !== w[k - 1].toLowerCase()).join(' '); }
           const tileish = isMines && mineTile(el, tag, r);
           if (!text && !tileish) continue;
-          if (inGame && !tileish && (NAV_CHROME.test(text) || SNAP_SKIP.test(text))) continue;
+          if (inGame && !tileish && (NAV_CHROME.test(text) || SNAP_SKIP.test(text) || /^number\s+\d+\b.*\b(?:drawn|a hit|a miss)\b/i.test(text))) continue;
           const key = `${text}@${Math.round(r.x)},${Math.round(r.y)}`;
           if (seen.has(key)) continue;
           seen.add(key);
