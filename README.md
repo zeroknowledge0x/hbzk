@@ -108,7 +108,7 @@ chat jumps the queue.
 | `src/uptime.js` | Unattended-run ledger (`data/uptime.json`): a supervisor restart keeps the clock, only a launcher a person runs resets it; prints `UNATTENDED h · BEST h · RESTARTS n` |
 | `src/core/llm-chain.js` | Provider chain: a 429 parks that provider until the reset time it reports and the mouth continues on `LLM_FALLBACK_*` |
 | `src/moderation.js` | Follow/view scams and automation pitches are classified and never read aloud |
-| `src/core/metrics.js` | Messages in, answered, reply latency and ignored questions, written to the log each minute |
+| `src/core/metrics.js` | Messages in, spoken reply lines (`spoke` — greetings and owner lines count, so it can exceed messages), reply latency and ignored questions, written to the log each minute |
 | `src/core/allowlist.js` | Only housebets.com and kick.com are navigable |
 | `src/core/playbook.js` | Verified lessons per table (Voyager-style skill library): only a settled round is stored, and the host reads them back as one line of advice |
 | `src/core/reflexion.js` | Verbal self-critique after a failed round, carried into the retry; after four tries the host asks for a different table instead of grinding |
