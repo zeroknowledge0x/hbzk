@@ -24,6 +24,7 @@ import { Verifier } from './core/verifier.js';
 import { byName } from './core/adapters/index.js';
 import { Controller } from './core/controller.js';
 import { Rotation, quietIntervalMs } from './core/rotation.js';
+import { clearSafetyHalt, readSafetyHalt, writeSafetyHalt } from './core/safety-halt.js';
 import { inferPhase } from './core/play-labels.js';
 import { OpsLoop } from './ops-loop.js';
 import { broadcastReadiness } from './broadcast-readiness.js';
@@ -226,7 +227,15 @@ const brain = new Brain(c, { memory, kb, chain: llmChain });
 const LEDGER_FILE = path.join(process.cwd(), 'data', 'uptime.json');
 let uptimeLedger = loadLedger(LEDGER_FILE);
 uptimeLedger = noteStart(uptimeLedger, Date.now(), { restarted: uptimeLedger.lastStartAt !== null });
-if (String(process.env.HUBIE_HUMAN_START || '') === '1') uptimeLedger = noteHuman(uptimeLedger, Date.now());
+if (String(process.env.HUBIE_HUMAN_START || '') === '1') {
+  uptimeLedger = noteHuman(uptimeLedger, Date.now());
+  if (readSafetyHalt()) {
+    clearSafetyHalt();
+    log('hubie: safety halt cleared by a human start');
+  }
+} else if (readSafetyHalt()) {
+  log('hubie: a safety halt is on record — start with HUBIE_HUMAN_START=1 once the cause is fixed');
+}
 saveLedger(LEDGER_FILE, uptimeLedger);
 log(`hubie: ${ledgerLine(uptimeLedger, Date.now())}`);
 let chatMetrics = createMetrics();
@@ -548,6 +557,12 @@ const controller = new Controller({world,tools:coreTools,planner,verifier,game,r
   declinedFile:path.join(process.cwd(),'data','declined.json'),
   // The model looks at the compressed control list and names the click. No policy fallback.
   look: (view) => jevClick(view),
+  // A hand the box cannot resolve halts instead of guessing: marker on disk, live off, no restart loop.
+  onSafetyHalt: (reason) => {
+    writeSafetyHalt(reason);
+    log(`hubie: safety halt - live off until the cause is fixed (${reason})`);
+    shutdown(`safety halt - ${reason}`);
+  },
   // Only verified rounds reach the playbook; the controller only reads its advice.
   advise: (table, info) => advise(playbook, table, info),
   notifyAction: (label) => { driftWatch = noteAction(driftWatch, { action: label }); },

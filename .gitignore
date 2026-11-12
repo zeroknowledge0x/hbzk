@@ -62,6 +62,9 @@ data/telegram.json
 data/rotation.json
 data/declined.json
 
+# Safety halt marker (runtime stop; a human start clears it, git never carries it)
+data/safety-halt.json
+
 # Unattended-run ledger (runtime state, survives restarts on the host)
 data/uptime.json
 

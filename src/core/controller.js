@@ -22,7 +22,7 @@ const STARTS_ROUND = /^(bet|deal|spin|roll|go|play|bet again|new bet|repeat)\b/i
 const MODE_CHIP = /^(classic|low|medium|high|over|under|inside|outside)$/i;
 
 export class Controller {
-  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random, now, advise, notifyAction, look, declinedFile }) {
+  constructor({ world, tools, planner, verifier, game, speak, log, rotation, playable, seeFrame, playQueue, random, now, advise, notifyAction, look, declinedFile, onSafetyHalt }) {
     this.world = world;
     this.tools = tools;
     this.planner = planner;
@@ -36,6 +36,8 @@ export class Controller {
     this.playQueue = playQueue || null;
     this._chain = Promise.resolve();
     this._paused = false;
+    this._safetyHaltReason = null;
+    this._onSafetyHalt = typeof onSafetyHalt === 'function' ? onSafetyHalt : null;
     this._active = false;
     this._snapshot = null;
     this._completed = 0;
@@ -54,9 +56,11 @@ export class Controller {
     this._nextRoundAt = 0;
     // A bet that is on the table is not over until a result is read back. The page phase can
     // read idle for a beat while a board settles, and that gap is how the host used to walk
-    // off mid-round. The cap keeps a lost result from wedging the rotation forever.
+    // off mid-round. There is no timeout: only a verified result or a real table change settles it
+    // (`_noteSettled`), and a step that never settles halts the live instead of guessing.
     this._betAt = 0;
-    this._betCapMs = Number(process.env.HUBIE_BET_CAP_MS) > 0 ? Number(process.env.HUBIE_BET_CAP_MS) : 45000;
+    // How many clicks on one unresolved step before the live stops. Named in the halt reason.
+    this._haltAfterClicks = Number(process.env.HUBIE_HALT_AFTER_CLICKS) > 0 ? Number(process.env.HUBIE_HALT_AFTER_CLICKS) : 9;
     this._deferredGame = null;
     // One label clicked over and over is a click bot, not a host. This counts it per round.
     this._repeatLabel = null;
@@ -80,7 +84,7 @@ export class Controller {
 
   _roundLive(now = this.now()) {
     if ((this.world?.get?.()?.phase || '') === 'playing') return true;
-    return !!this._betAt && now - this._betAt < this._betCapMs;
+    return !!this._betAt;
   }
 
   // Only a click that puts a bet on the table arms the round timer. A direction preset ("Outside"),
@@ -129,11 +133,21 @@ export class Controller {
   }
 
   pause() { this._paused = true; this._active = false; }
-  resume() { this._paused = false; }
+  resume() { if (!this._safetyHaltReason) this._paused = false; }
+
+  _safetyHalt(reason) {
+    if (this._safetyHaltReason) return;
+    this._safetyHaltReason = String(reason || 'unresolved hand');
+    this._paused = true;
+    this._active = false;
+    this.log(`controller: safety halt (${this._safetyHaltReason})`);
+    this._onSafetyHalt?.(this._safetyHaltReason);
+  }
 
   // The ops loop asking for play: get a round going on the table that is open, without touching the
   // rotation. The next tick re-plans the current table with one round.
   playNowTable() {
+    if (this._safetyHaltReason) return;
     if (this._paused) this._paused = false;
     this._nextRoundAt = 0;
   }
@@ -457,15 +471,11 @@ export class Controller {
     if (result?.deferred) {
       // A step that keeps clicking without ever settling is a click bot: the in-round enter_game
       // held a live bet, played the table, and deferred again — forever (measured 61 clicks with
-      // zero planner lines). Bound it, name it, and let the plan move on.
+      // zero planner lines). Never fake a settlement: halt, name the cause, and stop the live.
       if (result.clicked) {
         this._stepClicks = (this._stepClicks || 0) + 1;
-        if (this._stepClicks > 8) {
-          this.log(`controller: ${step.kind} clicked ${this._stepClicks} times without settling — moving on`);
-          this._stepClicks = 0;
-          this._deferredStep = null;
-          this._noteSettled();
-          this.planner.settle({ ok: true, skipped: true, reason: 'click-budget' });
+        if (this._stepClicks >= this._haltAfterClicks) {
+          this._safetyHalt(`${step.kind} clicked ${this._stepClicks} times without a verified result`);
           return;
         }
       }

@@ -29,6 +29,15 @@ if errorlevel 1 (
   echo [hubie] another Hubie node detected before restart - exit
   exit /b 2
 )
+REM A safety halt is a stop, not a crash: never restart into the same unresolved hand.
+REM A human start (HUBIE_HUMAN_START=1) is what clears the marker.
+if not "%HUBIE_HUMAN_START%"=="1" (
+  node scripts\safety-halt-check.mjs
+  if errorlevel 1 (
+    echo [hubie] safety halt on record - live stays off until the cause is fixed
+    exit /b 3
+  )
+)
 echo [hubie] starting %DATE% %TIME%
 node src\index.js
 echo [hubie] process exited, restarting in 5 seconds
