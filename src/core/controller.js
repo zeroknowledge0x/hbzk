@@ -421,7 +421,10 @@ export class Controller {
       const rotate = this.rotation.due();
       let name = null;
       if (rotate) {
-        name = typeof this.rotation.random === 'function' ? this.rotation.random() : this.rotation.next();
+        // Hand the rotation the table that is on screen, not just the persisted cursor, so a due
+        // rotation cannot land back on the table the host has been playing for the last interval.
+        const playing = String(this.world?.get?.()?.game || '').trim();
+        name = typeof this.rotation.random === 'function' ? this.rotation.random(playing) : this.rotation.next();
       } else {
         name = String(this.world?.get?.()?.game || this.planner.status()?.goal?.game || '').trim();
       }

@@ -240,6 +240,17 @@ describe('Rotation', () => {
       assert.equal(Rotation.driftResponse('DRIFT capture-stall · slowest stage capture'), 'rearm-capture');
     });
 
+    it('a rotation never picks the table that is already playing', () => {
+      const rot = makeRotation();
+      const seen = new Set();
+      // The persisted cursor is the *next* name, not the table on screen, so excluding only
+      // current() can hand back the table the host is already on and burn a full interval on it
+      // (measured 2026-11-12: back-to-back Max Win plans 33 min apart, 08:06 re-picked Max Win).
+      for (let i = 0; i < 40; i++) seen.add(rot.random('Mines'));
+      assert.equal(seen.has('Mines'), false, [...seen].join(','));
+      for (const name of seen) assert.ok(['Dice', 'Mines', 'Plinko'].includes(name), name);
+    });
+
     it('a declined table never comes back from random()', () => {
       const rot = makeRotation();
       rot.decline('dice');

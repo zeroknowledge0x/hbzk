@@ -39,13 +39,24 @@ export class Rotation {
   }
 
   // Quiet stream: pick a random playable table and stay on it for the interval.
-  random() {
+  //
+  // `excludeName` is the table actually on screen. The persisted cursor is the *next* name, not the
+  // playing table, so excluding only `current()` can hand back the table the host is already on —
+  // measured 2026-11-12: a due rotation at 08:06 re-picked Max Win, which had been playing since
+  // 07:33, spending a second full interval on one table.
+  random(excludeName = '') {
+    const playing = String(excludeName || '').trim().toLowerCase();
     const pool = this.names.filter((candidate) =>
       [...this.playable].some((p) => String(p).toLowerCase() === candidate.toLowerCase()));
     if (pool.length <= 1) return this.next();
-    const current = this.current();
-    const rest = pool.filter((n) => n.toLowerCase() !== String(current || '').toLowerCase());
-    const pick = (rest.length ? rest : pool)[Math.floor(Math.random() * (rest.length ? rest.length : pool.length))];
+    const cursor = String(this.current() || '').toLowerCase();
+    let rest = pool.filter((n) => {
+      const key = n.toLowerCase();
+      return key !== cursor && key !== playing;
+    });
+    if (!rest.length) rest = pool.filter((n) => n.toLowerCase() !== playing);
+    if (!rest.length) rest = pool;
+    const pick = rest[Math.floor(Math.random() * rest.length)];
     const at = this.names.findIndex((n) => n.toLowerCase() === pick.toLowerCase());
     if (at >= 0) this.index = (at + 1) % this.names.length;
     this._save();
