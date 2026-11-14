@@ -473,28 +473,55 @@ test('a table whose result cannot be read comes off the rotation after three tri
   rmSync(file, { force: true });
 });
 
-test('a step that clicks without ever settling is bounded and named', async () => {
-  const logs = [];
-  const clicks = [];
-  let clock = 1000;
-  const world = new World({ game: "Hubie's Road", phase: 'playing', controls: ['Bet', 'Random pick', 'Pick floor 1, tile 1', 'Cash out 1.90x'], stake: 0 });
+test('a switch that waits for the round never spends the halt budget', async () => {
+  const clicks = []; let halt = 0;
+  // Measured 2026-11-13 12:26 Z: the rotation was due for Dragon Tower while a Hilo hand was live,
+  // tools answered "cannot change game mid-round", the host kept playing Hilo — and nine of those
+  // legal Hilo clicks were counted against the pending enter_game, which halted a 96 h 55 m live.
+  const world = new World({ game: 'Hilo', phase: 'playing', controls: ['Bet', 'Higher / same', 'Lower / same'], stake: 0 });
   const planner = new Planner({ world });
-  planner.setGoal({ game: 'Dragon Tower', rounds: 1 });
-  let halt = 0;
+  planner.setGoal({ game: 'Dragon Tower', rounds: 3 });
   const c = new Controller({
     world, planner,
     game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async (l) => { clicks.push(l); return { ok: true, text: l }; }, getReport: () => ({}) },
-    tools: { run: async () => ({ ok: true }) }, verifier: { waitFor: async () => ({ ok: false }) },
-    now: () => clock, log: (l) => logs.push(String(l)), look: async () => 'Random pick',
+    tools: { run: async () => ({ ok: false, error: 'cannot change game mid-round' }) },
+    verifier: { waitFor: async () => ({ ok: false }) },
+    log: () => {}, look: async () => 'Higher / same',
     onSafetyHalt: () => { halt++; },
   });
   c._active = true;
-  c._noteBet('Bet');
-  for (let i = 0; i < 12; i++) { clock += 1500; await c.tick(); }
-  assert.equal(clicks.length, 9, 'no more clicks after the safety halt');
-  assert.equal(halt, 1, 'unresolved hand triggers the safety halt exactly once');
-  assert.equal(planner.status().kind, 'enter_game', 'no fake successful transition');
-  assert.ok(c._roundLive(), 'the unresolved bet is not cleared');
+  for (let i = 0; i < 14; i++) await c.tick();
+  assert.ok(clicks.length >= 9, `the open table keeps playing, got ${clicks.length}`);
+  assert.equal(halt, 0, 'waiting for a hand to end is not a stuck step');
+  assert.equal(planner.status().kind, 'enter_game', 'the switch is still pending, never faked');
+});
+
+test('a step whose own clicks never settle still halts', async () => {
+  let halt = 0;
+  const world = new World({ game: 'Hilo', phase: 'playing', controls: ['Bet'], stake: 0 });
+  const planner = new Planner({ world });
+  planner.setGoal({ game: 'Hilo', rounds: 1 });
+  const c = new Controller({
+    world, planner,
+    game: { setStake: async () => ({ ok: true, verified: true, observed: 0 }), clickText: async () => ({ ok: true, text: 'Bet' }), getReport: () => ({}) },
+    tools: { run: async () => ({ ok: true }) }, verifier: { waitFor: async () => ({ ok: false }) },
+    log: () => {}, onSafetyHalt: () => { halt++; },
+  });
+  // Clicks on the step's own board that never settle are the click-bot case the halt exists for.
+  c._executeStep = async () => ({ ok: false, deferred: true, clicked: true, error: 'clicks land, nothing settles' });
+  c._active = true;
+  for (let i = 0; i < 12; i++) await c.tick();
+  assert.equal(halt, 1, 'the backstop still fires for a genuinely stuck step');
+  assert.equal(c._stepClicks, 9, `halted after the budget, got ${c._stepClicks}`);
+});
+
+test('a settled round gives the stuck-step budget back', () => {
+  const world = new World({ game: 'Hilo', phase: 'playing', controls: ['Bet'], stake: 0 });
+  const planner = new Planner({ world });
+  const c = new Controller({ world, planner, log: () => {} });
+  c._stepClicks = 5;
+  c._noteSettled();
+  assert.equal(c._stepClicks, 0, 'progress resets the count');
 });
 
 test('a table declined earlier today stays off the rotation after a restart', async () => {

@@ -99,7 +99,7 @@ export class Controller {
     this._betAt = this.now();
   }
 
-  _noteSettled() { this._betAt = 0; this._fallbackHolds = 0; this._repeatLabel = null; this._repeatCount = 0; this._chipLabel = null; this._chipCount = 0; this._chipsThisRound = 0; }
+  _noteSettled() { this._betAt = 0; this._fallbackHolds = 0; this._repeatLabel = null; this._repeatCount = 0; this._chipLabel = null; this._chipCount = 0; this._chipsThisRound = 0; this._stepClicks = 0; }
 
   // How long a table change is given to paint before the next try counts. Overridable so a test
   // does not have to wait.
@@ -481,7 +481,10 @@ export class Controller {
       // A step that keeps clicking without ever settling is a click bot: the in-round enter_game
       // held a live bet, played the table, and deferred again — forever (measured 61 clicks with
       // zero planner lines). Never fake a settlement: halt, name the cause, and stop the live.
-      if (result.clicked) {
+      //
+      // Clicks made on the open table while a switch waits (`openTable`) are not the step's own —
+      // counting them turned a legitimate "wait for this hand to end" into a halt on 2026-11-13.
+      if (result.clicked && !result.openTable) {
         this._stepClicks = (this._stepClicks || 0) + 1;
         if (this._stepClicks >= this._haltAfterClicks) {
           this._safetyHalt(`${step.kind} clicked ${this._stepClicks} times without a verified result`);
@@ -579,6 +582,10 @@ export class Controller {
               reason: 'in-round',
               error: 'Waiting for current table before switch',
               clicked: !!played?.detail,
+              // The clicks above were made on the table that is open, not on the switch this step
+              // wants. Charging them to this step is how nine legal Hilo clicks halted a live that
+              // had run 96 h 55 m (2026-11-13 12:26 Z) — a wait for a hand is not a stuck step.
+              openTable: played?.openTable || actual,
             };
           }
           return { ok: true, skipped: true, reason: 'in-round' };
@@ -682,6 +689,9 @@ export class Controller {
     // Progress is read from the board that is actually on screen (revealed gems, cleared
     // floors/lanes); the number of clicks is never used as proof.
     let progress = readObservedProgress(gameName, { ...(worldState.report || {}), controls });
+    // Set when the host plays the table that is on screen instead of the planned one (a switch is
+    // waiting for the hand to end). Those clicks are not the pending step's own.
+    let playedOpenTable = false;
     // Every table: the model sees the controls (compressed when the board is long) and names
     // one. A silent or illegal answer is a no-click. The measured policy is not a fallback,
     // because a random Hit/Stand/chip is what made the host play without looking.
@@ -740,6 +750,11 @@ export class Controller {
         gameName = onScreen;
         adapter = byName(onScreen) || adapter;
         progress = readObservedProgress(onScreen, { ...(worldState.report || {}), controls });
+        // These clicks belong to the open table, not to the pending step. They are how the host
+        // keeps playing while the switch waits for the round to end, so they must not be counted
+        // against the stuck-step budget (measured 2026-11-13 12:26 Z: nine legal Hilo clicks under
+        // a pending Dragon Tower enter_game halted a live that had run 96 h 55 m).
+        playedOpenTable = true;
       } else {
         this._boardSwitches?.clear();
       }
@@ -883,9 +898,9 @@ export class Controller {
       if (byName(gameName)?.name === 'Dice' && /^(?:over|under|inside|outside)(?:\s|$)/i.test(String(label).trim())) {
         // Still a dial, not a started round — but it is a click the round spent, so hand it to the
         // halt budget. Without `clicked` this path was the one unbounded click loop left.
-        return { ok: false, deferred: true, clicked: true, error: 'Dice direction selected; waiting for Bet' };
+        return { ok: false, deferred: true, clicked: true, openTable: playedOpenTable ? gameName : null, error: 'Dice direction selected; waiting for Bet' };
       }
-      return { ok: true, detail: raw };
+      return { ok: true, detail: raw, openTable: playedOpenTable ? gameName : null };
     }
     const raw = await this.tools.run('click', { label });
     if (raw?.ok) {
